@@ -2,7 +2,8 @@
 
 type Serde =
     static member val DefaultBackend : ISerdeBackend =
-        failwith "No backend registered. Install a Serde.FS backend package."
+        failwith "No backend registered." 
+        with get, set
 
     static member Serialize(value: 'T) =
         Serde.DefaultBackend.Serialize(value, None)
