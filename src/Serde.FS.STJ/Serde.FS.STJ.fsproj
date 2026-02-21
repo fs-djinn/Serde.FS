@@ -15,6 +15,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
+    <ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj"
+                      PrivateAssets="all"
+                      ReferenceOutputAssembly="false"
+                      OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

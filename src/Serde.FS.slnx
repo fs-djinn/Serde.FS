@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj" />
   <Project Path="Serde.FS.STJ/Serde.FS.STJ.fsproj" />
   <Project Path="Serde.FS/Serde.FS.fsproj" />
 </Solution>
