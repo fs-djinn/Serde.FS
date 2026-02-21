@@ -1,20 +1,29 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <Compile Include="Program.fs" />
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Include="Program.fs" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Serde.FS.STJ" Version="0.3.0" />
-  </ItemGroup>
+	<!--
+	<ItemGroup>
+		<PackageReference Include="Serde.FS.STJ" Version="0.3.0" />
+	</ItemGroup>
+    -->
 
-  <ItemGroup>
-    <ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
 
+		<!-- Analyzer reference -->
+		<ProjectReference Include="..\Serde.FS.STJ\Serde.FS.STJ.fsproj"
+			OutputItemType="Analyzer"
+			ReferenceOutputAssembly="false" />
+
+		<!-- Runtime reference -->
+		<ProjectReference Include="..\Serde.FS.STJ\Serde.FS.STJ.fsproj" />
+	</ItemGroup>
 </Project>
