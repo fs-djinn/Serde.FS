@@ -3,6 +3,9 @@
              AssemblyFile="$(MSBuildThisFileDirectory)../analyzers/dotnet/fs/Serde.FS.SourceGen.dll" />
 
   <Target Name="SerdeGenerate" BeforeTargets="CoreCompile">
+	  
+	<Message Text="Serde.FS.STJ.targets loaded" Importance="High" />
+	  
     <SerdeGeneratorTask SourceFiles="@(Compile)" OutputDir="$(IntermediateOutputPath)serde-generated/" />
     <!-- Add generated files to Compile, inserted after user code -->
     <ItemGroup>
