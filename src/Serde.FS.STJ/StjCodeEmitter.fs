@@ -80,7 +80,42 @@ module internal StjCodeEmitterImpl =
         appendf "            JsonMetadataServices.CreateObjectInfo<%s>(" fqn
         appendf "                options,"
         appendf "                JsonObjectInfoValues<%s>(" fqn
-        appendf "                    ObjectCreator = (fun () -> Unchecked.defaultof<%s>)," fqn
+
+        // ObjectWithParameterizedConstructorCreator: constructs F# record from args array
+        append  "                    ObjectWithParameterizedConstructorCreator = (fun (args: obj[]) ->"
+        let fieldAssignments =
+            info.Fields
+            |> List.mapi (fun i field ->
+                sprintf "%s.%s = args.[%d] :?> %s" fqn field.Name i field.FSharpType)
+            |> String.concat "; "
+        appendf "                        { %s })," fieldAssignments
+
+        // ConstructorParameterMetadataInitializer: describes each constructor parameter
+        appendf "                    ConstructorParameterMetadataInitializer = (fun _ ->"
+        appendf "                        [|"
+        for i, field in info.Fields |> List.mapi (fun i x -> i, x) do
+            appendf "                            JsonParameterInfoValues(Name = \"%s\", ParameterType = typeof<%s>, Position = %d)"
+                (lowerFirst field.Name) field.FSharpType i
+        appendf "                        |]"
+        appendf "                    ),"
+
+        appendf "                    PropertyMetadataInitializer = (fun _ ->"
+        appendf "                        [|"
+
+        for field in info.Fields do
+            appendf "                            JsonMetadataServices.CreatePropertyInfo<%s>(" field.FSharpType
+            appendf "                                options,"
+            appendf "                                JsonPropertyInfoValues<%s>(" field.FSharpType
+            appendf "                                    IsProperty = true,"
+            appendf "                                    IsPublic = true,"
+            appendf "                                    DeclaringType = typeof<%s>," fqn
+            appendf "                                    PropertyName = \"%s\"," field.Name
+            appendf "                                    Getter = (fun (obj: obj) -> (obj :?> %s).%s)" fqn field.Name
+            appendf "                                )"
+            appendf "                            )"
+
+        appendf "                        |]"
+        appendf "                    ),"
         appendf "                    SerializeHandler = (fun writer value ->"
         appendf "                    writer.WriteStartObject()"
 
