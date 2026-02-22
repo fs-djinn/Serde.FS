@@ -76,7 +76,7 @@ module AstParser =
     let private extractNamespace (longId: LongIdent) =
         longId |> List.map (fun i -> i.idText) |> String.concat "."
 
-    let private processTypeDefn (ns: string) (typeDefn: SynTypeDefn) : SerdeTypeInfo option =
+    let private processTypeDefn (ns: string option) (modules: string list) (typeDefn: SynTypeDefn) : SerdeTypeInfo option =
         let (SynTypeDefn(typeInfo = synComponentInfo; typeRepr = typeRepr)) = typeDefn
         let (SynComponentInfo(attributes = attrs; longId = typeNameIdent)) = synComponentInfo
 
@@ -91,20 +91,24 @@ module AstParser =
                 let typeName = typeNameIdent |> List.map (fun i -> i.idText) |> String.concat "."
                 Some {
                     Namespace = ns
+                    EnclosingModules = modules
                     TypeName = typeName
                     Capability = cap
                     Fields = extractFields fields
                 }
             | _ -> None
 
-    let private walkDecls (ns: string) (decls: SynModuleDecl list) : SerdeTypeInfo list =
+    let rec private walkDecls (ns: string option) (modules: string list) (decls: SynModuleDecl list) : SerdeTypeInfo list =
         [ for decl in decls do
             match decl with
             | SynModuleDecl.Types(typeDefns, _) ->
                 for typeDefn in typeDefns do
-                    match processTypeDefn ns typeDefn with
+                    match processTypeDefn ns modules typeDefn with
                     | Some info -> yield info
                     | None -> ()
+            | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo(longId = moduleIdent); decls = nestedDecls) ->
+                let moduleName = moduleIdent |> List.map (fun i -> i.idText) |> String.concat "."
+                yield! walkDecls ns (modules @ [moduleName]) nestedDecls
             | _ -> () ]
 
     let private parseTree (filePath: string) (sourceText: string) : SerdeTypeInfo list =
@@ -120,9 +124,16 @@ module AstParser =
 
         match parseResults.ParseTree with
         | ParsedInput.ImplFile(ParsedImplFileInput(contents = modules)) ->
-            [ for SynModuleOrNamespace(longId = nsId; decls = decls) in modules do
-                let ns = extractNamespace nsId
-                yield! walkDecls ns decls ]
+            [ for SynModuleOrNamespace(longId = nsId; kind = kind; decls = decls) in modules do
+                match kind with
+                | SynModuleOrNamespaceKind.NamedModule ->
+                    let moduleNames = nsId |> List.map (fun i -> i.idText)
+                    yield! walkDecls None moduleNames decls
+                | SynModuleOrNamespaceKind.DeclaredNamespace ->
+                    let ns = Some (extractNamespace nsId)
+                    yield! walkDecls ns [] decls
+                | _ ->
+                    yield! walkDecls None [] decls ]
         | _ -> []
 
     /// Parse F# source text and return all Serde-annotated types found.

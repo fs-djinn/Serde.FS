@@ -17,7 +17,8 @@ type Person = { FName: string; LName: string; Age: int }
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
-    Assert.That(t.Namespace, Is.EqualTo("MyApp"))
+    Assert.That(t.Namespace, Is.EqualTo(Some "MyApp"))
+    Assert.That(t.EnclosingModules, Is.EqualTo(List.empty<string>))
     Assert.That(t.TypeName, Is.EqualTo("Person"))
     Assert.That(t.Capability, Is.EqualTo(Both))
     Assert.That(t.Fields.Length, Is.EqualTo(3))
@@ -134,3 +135,36 @@ type AllTypes = {
     Assert.That(t.Fields.[5].FSharpType, Is.EqualTo("bool"))
     Assert.That(t.Fields.[6].FSharpType, Is.EqualTo("System.DateTime"))
     Assert.That(t.Fields.[7].FSharpType, Is.EqualTo("System.Guid"))
+
+[<Test>]
+let ``Parses type inside a named module`` () =
+    let source = """
+module Program
+
+[<Serde>]
+type Person = { Name: string; Age: int }
+"""
+    let types = AstParser.parseSource "/test.fs" source
+    Assert.That(types.Length, Is.EqualTo(1))
+
+    let t = types.[0]
+    Assert.That(t.Namespace, Is.EqualTo(None))
+    Assert.That(t.EnclosingModules, Is.EqualTo(["Program"]))
+    Assert.That(t.TypeName, Is.EqualTo("Person"))
+
+[<Test>]
+let ``Parses type inside nested module under namespace`` () =
+    let source = """
+namespace MyApp
+
+module Domain =
+    [<Serde>]
+    type Person = { Name: string; Age: int }
+"""
+    let types = AstParser.parseSource "/test.fs" source
+    Assert.That(types.Length, Is.EqualTo(1))
+
+    let t = types.[0]
+    Assert.That(t.Namespace, Is.EqualTo(Some "MyApp"))
+    Assert.That(t.EnclosingModules, Is.EqualTo(["Domain"]))
+    Assert.That(t.TypeName, Is.EqualTo("Person"))

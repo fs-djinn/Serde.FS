@@ -6,7 +6,8 @@ open Serde.FS.SourceGen
 [<Test>]
 let ``Emits valid F# for simple record`` () =
     let info = {
-        Namespace = "MyApp"
+        Namespace = Some "MyApp"
+        EnclosingModules = []
         TypeName = "Person"
         Capability = Both
         Fields = [
@@ -20,8 +21,8 @@ let ``Emits valid F# for simple record`` () =
     Assert.That(code, Does.Contain("module rec Serde.Generated.Person"))
     Assert.That(code, Does.Contain("module internal PersonSerdeTypeInfo"))
     Assert.That(code, Does.Contain("personJsonTypeInfo"))
-    Assert.That(code, Does.Contain("JsonTypeInfo<Person>"))
-    Assert.That(code, Does.Contain("JsonMetadataServices.CreateObjectInfo<Person>"))
+    Assert.That(code, Does.Contain("JsonTypeInfo<MyApp.Person>"))
+    Assert.That(code, Does.Contain("JsonMetadataServices.CreateObjectInfo<MyApp.Person>"))
     Assert.That(code, Does.Contain("""writer.WriteString("FName", value.FName)"""))
     Assert.That(code, Does.Contain("""writer.WriteString("LName", value.LName)"""))
     Assert.That(code, Does.Contain("""writer.WriteNumber("Age", value.Age)"""))
@@ -31,7 +32,8 @@ let ``Emits valid F# for simple record`` () =
 [<Test>]
 let ``Emits WriteBoolean for bool fields`` () =
     let info = {
-        Namespace = "MyApp"
+        Namespace = Some "MyApp"
+        EnclosingModules = []
         TypeName = "Config"
         Capability = Serialize
         Fields = [
@@ -45,7 +47,8 @@ let ``Emits WriteBoolean for bool fields`` () =
 [<Test>]
 let ``Emits WriteNumber for numeric types`` () =
     let info = {
-        Namespace = "MyApp"
+        Namespace = Some "MyApp"
+        EnclosingModules = []
         TypeName = "Numbers"
         Capability = Serialize
         Fields = [
@@ -65,7 +68,8 @@ let ``Emits WriteNumber for numeric types`` () =
 [<Test>]
 let ``Emits option handling for optional fields`` () =
     let info = {
-        Namespace = "MyApp"
+        Namespace = Some "MyApp"
+        EnclosingModules = []
         TypeName = "Person"
         Capability = Serialize
         Fields = [
@@ -82,7 +86,8 @@ let ``Emits option handling for optional fields`` () =
 [<Test>]
 let ``Emits auto-generated header`` () =
     let info = {
-        Namespace = "MyApp"
+        Namespace = Some "MyApp"
+        EnclosingModules = []
         TypeName = "Foo"
         Capability = Both
         Fields = [{ Name = "X"; FSharpType = "int" }]
@@ -94,7 +99,8 @@ let ``Emits auto-generated header`` () =
 [<Test>]
 let ``Emits DateTime as WriteString with ISO format`` () =
     let info = {
-        Namespace = "MyApp"
+        Namespace = Some "MyApp"
+        EnclosingModules = []
         TypeName = "Event"
         Capability = Serialize
         Fields = [
@@ -108,7 +114,8 @@ let ``Emits DateTime as WriteString with ISO format`` () =
 [<Test>]
 let ``Emits Guid as WriteString`` () =
     let info = {
-        Namespace = "MyApp"
+        Namespace = Some "MyApp"
+        EnclosingModules = []
         TypeName = "Entity"
         Capability = Serialize
         Fields = [
@@ -133,6 +140,7 @@ type Person = { FName: string; LName: string; Age: int }
     let code = CodeEmitter.emit types.[0]
     Assert.That(code, Does.Contain("module rec Serde.Generated.Person"))
     Assert.That(code, Does.Contain("personJsonTypeInfo"))
+    Assert.That(code, Does.Contain("JsonTypeInfo<TestApp.Person>"))
     Assert.That(code, Does.Contain("""writer.WriteString("FName", value.FName)"""))
     Assert.That(code, Does.Contain("""writer.WriteString("LName", value.LName)"""))
     Assert.That(code, Does.Contain("""writer.WriteNumber("Age", value.Age)"""))

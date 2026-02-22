@@ -46,6 +46,13 @@ module CodeEmitter =
         if System.String.IsNullOrEmpty(s) then s
         else string (System.Char.ToLowerInvariant(s.[0])) + s.Substring(1)
 
+    let private fullyQualifiedName (info: SerdeTypeInfo) : string =
+        let parts =
+            [ yield! info.Namespace |> Option.toList
+              yield! info.EnclosingModules
+              yield info.TypeName ]
+        String.concat "." parts
+
     /// Generate F# source code for a single Serde-annotated type.
     let emit (info: SerdeTypeInfo) : string =
         let sb = StringBuilder()
@@ -66,13 +73,14 @@ module CodeEmitter =
 
         let fnName = lowerFirst info.TypeName + "JsonTypeInfo"
 
-        appendf "    let %s (options: JsonSerializerOptions) : JsonTypeInfo<%s> =" fnName info.TypeName
+        let fqn = fullyQualifiedName info
+        appendf "    let %s (options: JsonSerializerOptions) : JsonTypeInfo<%s> =" fnName fqn
 
         appendf "        let info ="
-        appendf "            JsonMetadataServices.CreateObjectInfo<%s>(" info.TypeName
+        appendf "            JsonMetadataServices.CreateObjectInfo<%s>(" fqn
         appendf "                options,"
-        appendf "                JsonObjectInfoValues<%s>(" info.TypeName
-        appendf "                    ObjectCreator = (fun () -> Unchecked.defaultof<%s> :> obj)," info.TypeName
+        appendf "                JsonObjectInfoValues<%s>(" fqn
+        appendf "                    ObjectCreator = (fun () -> Unchecked.defaultof<%s> :> obj)," fqn
         appendf "                    SerializeHandler = (fun writer value ->"
         appendf "                    writer.WriteStartObject()"
 

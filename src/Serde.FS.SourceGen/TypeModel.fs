@@ -11,7 +11,8 @@ type FieldInfo = {
 }
 
 type SerdeTypeInfo = {
-    Namespace: string
+    Namespace: string option
+    EnclosingModules: string list
     TypeName: string
     Capability: SerdeCapability
     Fields: FieldInfo list
