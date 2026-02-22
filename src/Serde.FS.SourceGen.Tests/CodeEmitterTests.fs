@@ -17,7 +17,7 @@ let ``Emits valid F# for simple record`` () =
     }
 
     let code = CodeEmitter.emit info
-    Assert.That(code, Does.Contain("namespace MyApp"))
+    Assert.That(code, Does.Contain("module rec Serde.Generated.Person"))
     Assert.That(code, Does.Contain("module internal PersonSerdeTypeInfo"))
     Assert.That(code, Does.Contain("personJsonTypeInfo"))
     Assert.That(code, Does.Contain("JsonTypeInfo<Person>"))
@@ -131,7 +131,7 @@ type Person = { FName: string; LName: string; Age: int }
     Assert.That(types.Length, Is.EqualTo(1))
 
     let code = CodeEmitter.emit types.[0]
-    Assert.That(code, Does.Contain("namespace TestApp"))
+    Assert.That(code, Does.Contain("module rec Serde.Generated.Person"))
     Assert.That(code, Does.Contain("personJsonTypeInfo"))
     Assert.That(code, Does.Contain("""writer.WriteString("FName", value.FName)"""))
     Assert.That(code, Does.Contain("""writer.WriteString("LName", value.LName)"""))
