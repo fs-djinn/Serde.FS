@@ -169,3 +169,60 @@ module Domain =
     Assert.That(t.Namespace, Is.EqualTo(Some "MyApp"))
     Assert.That(t.EnclosingModules, Is.EqualTo(["Domain"]))
     Assert.That(t.TypeName, Is.EqualTo("Person"))
+
+[<Test>]
+let ``Detects SerdeApp.registerEntryPoint call`` () =
+    let source = """
+module Program
+
+open Serde.FS
+
+[<Serde>]
+type Person = { Name: string; Age: int }
+
+let run argv =
+    0
+
+SerdeApp.registerEntryPoint run
+"""
+    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    Assert.That(result, Is.True)
+
+[<Test>]
+let ``No entry point registration returns false`` () =
+    let source = """
+namespace MyApp
+
+open Serde.FS
+
+[<Serde>]
+type Person = { Name: string; Age: int }
+"""
+    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    Assert.That(result, Is.False)
+
+[<Test>]
+let ``Detects fully qualified Serde.FS.SerdeApp.registerEntryPoint`` () =
+    let source = """
+module Program
+
+let run argv = 0
+
+Serde.FS.SerdeApp.registerEntryPoint run
+"""
+    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    Assert.That(result, Is.True)
+
+[<Test>]
+let ``Detects entry point in named module`` () =
+    let source = """
+module MyApp.Program
+
+open Serde.FS
+
+let run argv = 0
+
+SerdeApp.registerEntryPoint run
+"""
+    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    Assert.That(result, Is.True)

@@ -36,6 +36,7 @@ type SerdeGeneratorTask() =
 
             let emitter = this.ResolveEmitter()
             let mutable success = true
+            let mutable hasEntryPoint = false
 
             for item in this.SourceFiles do
                 let filePath = item.ItemSpec
@@ -57,8 +58,32 @@ type SerdeGeneratorTask() =
                             | _ -> File.WriteAllText(outputFile, code)
 
                             this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
+
+                        // Check for entry point registration
+                        if not hasEntryPoint then
+                            hasEntryPoint <- AstParser.hasEntryPointRegistrationInFile filePath
                     with ex ->
                         this.Log.LogWarning("Serde: Failed to process {0}: {1}", filePath, ex.Message)
+
+            // Emit entry point shim if any source file registers an entry point
+            if hasEntryPoint then
+                let entryPointCode =
+                    "module Serde.Generated.EntryPoint\n\n" +
+                    "open Serde.FS\n\n" +
+                    "[<EntryPoint>]\n" +
+                    "let main argv =\n" +
+                    "    // Force all F# module initializers so that registerEntryPoint calls execute\n" +
+                    "    for t in System.Reflection.Assembly.GetExecutingAssembly().GetTypes() do\n" +
+                    "        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle)\n" +
+                    "    SerdeApp.invokeRegisteredEntryPoint argv\n"
+                let outputFile = Path.Combine(this.OutputDir, "~EntryPoint.serde.g.fs")
+                let existingContent =
+                    if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
+                    else None
+                match existingContent with
+                | Some existing when existing = entryPointCode -> ()
+                | _ -> File.WriteAllText(outputFile, entryPointCode)
+                this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
 
             success
         with ex ->
