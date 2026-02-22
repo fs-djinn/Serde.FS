@@ -18,5 +18,5 @@ let options = SerdeStjDefaults.options
 let configure (f: SerdeStjOptions -> unit) = f options
 
 /// Disables strict mode, allowing reflection-based serialization for types
-/// without [<Serde>] attributes.
+/// without generated Serde metadata.
 let allowReflectionFallback () = options.Strict <- false

@@ -37,6 +37,7 @@ type SerdeGeneratorTask() =
             let emitter = this.ResolveEmitter()
             let mutable success = true
             let mutable hasEntryPoint = false
+            let allTypes = System.Collections.Generic.List<SerdeTypeInfo>()
 
             for item in this.SourceFiles do
                 let filePath = item.ItemSpec
@@ -58,12 +59,29 @@ type SerdeGeneratorTask() =
                             | _ -> File.WriteAllText(outputFile, code)
 
                             this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
+                            allTypes.Add(typeInfo)
 
                         // Check for entry point registration
                         if not hasEntryPoint then
                             hasEntryPoint <- AstParser.hasEntryPointRegistrationInFile filePath
                     with ex ->
                         this.Log.LogWarning("Serde: Failed to process {0}: {1}", filePath, ex.Message)
+
+            // Emit resolver file if the emitter supports it
+            match emitter with
+            | :? ISerdeResolverEmitter as resolverEmitter ->
+                match resolverEmitter.EmitResolver(Seq.toList allTypes) with
+                | Some code ->
+                    let outputFile = Path.Combine(this.OutputDir, "SerdeResolver.serde.g.fs")
+                    let existingContent =
+                        if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
+                        else None
+                    match existingContent with
+                    | Some existing when existing = code -> ()
+                    | _ -> File.WriteAllText(outputFile, code)
+                    this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
+                | None -> ()
+            | _ -> ()
 
             // Emit entry point shim if any source file registers an entry point
             if hasEntryPoint then

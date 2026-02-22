@@ -5,6 +5,7 @@ open Serde.FS
 open Serde.FS.STJ
 
 let private emitter = StjCodeEmitter() :> ISerdeCodeEmitter
+let private resolverEmitter = StjCodeEmitter() :> ISerdeResolverEmitter
 
 [<Test>]
 let ``Emits valid F# for simple record`` () =
@@ -147,3 +148,49 @@ type Person = { FName: string; LName: string; Age: int }
     Assert.That(code, Does.Contain("""writer.WriteString("FName", value.FName)"""))
     Assert.That(code, Does.Contain("""writer.WriteString("LName", value.LName)"""))
     Assert.That(code, Does.Contain("""writer.WriteNumber("Age", value.Age)"""))
+
+[<Test>]
+let ``EmitResolver produces valid resolver for multiple types`` () =
+    let types = [
+        {
+            Namespace = Some "MyApp"
+            EnclosingModules = []
+            TypeName = "Person"
+            Capability = Both
+            Fields = [
+                { Name = "FName"; FSharpType = "string" }
+                { Name = "LName"; FSharpType = "string" }
+            ]
+        }
+        {
+            Namespace = Some "MyApp"
+            EnclosingModules = []
+            TypeName = "Address"
+            Capability = Serialize
+            Fields = [
+                { Name = "Street"; FSharpType = "string" }
+            ]
+        }
+    ]
+
+    let result = resolverEmitter.EmitResolver(types)
+    Assert.That(result.IsSome, Is.True)
+    let code = result.Value
+    Assert.That(code, Does.Contain("module Serde.Generated.SerdeStjResolver"))
+    Assert.That(code, Does.Contain("open Serde.Generated.Person"))
+    Assert.That(code, Does.Contain("open Serde.Generated.Address"))
+    Assert.That(code, Does.Contain("SerdeStjGeneratedResolver"))
+    Assert.That(code, Does.Contain("IJsonTypeInfoResolver"))
+    Assert.That(code, Does.Contain("typeof<MyApp.Person>"))
+    Assert.That(code, Does.Contain("typeof<MyApp.Address>"))
+    Assert.That(code, Does.Contain("personJsonTypeInfo"))
+    Assert.That(code, Does.Contain("addressJsonTypeInfo"))
+    Assert.That(code, Does.Contain("if ty = typeof<MyApp.Person>"))
+    Assert.That(code, Does.Contain("elif ty = typeof<MyApp.Address>"))
+    Assert.That(code, Does.Contain("else null"))
+    Assert.That(code, Does.Contain("SerdeStjResolverRegistry.registerResolver"))
+
+[<Test>]
+let ``EmitResolver returns None for empty list`` () =
+    let result = resolverEmitter.EmitResolver([])
+    Assert.That(result.IsNone, Is.True)

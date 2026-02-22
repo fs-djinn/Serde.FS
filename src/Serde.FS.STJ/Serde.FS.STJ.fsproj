@@ -42,6 +42,10 @@
 	</Target>
 
 	<ItemGroup>
+    <InternalsVisibleTo Include="Serde.FS.STJ.Tests" />
+  </ItemGroup>
+
+	<ItemGroup>
     <Compile Include="StjCodeEmitter.fs" />
     <Compile Include="StjOptions.fs" />
     <Compile Include="StjBackend.fs" />

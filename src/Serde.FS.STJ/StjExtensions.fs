@@ -10,8 +10,8 @@ module StjSerdeExtensions =
 
     type Serde with
 
-        static member Serialize(value: 'T, options: SerdeStjOptions) =
+        static member inline Serialize(value: 'T, options: SerdeStjOptions) =
             Serde.Serialize(value, options :> ISerdeOptions)
 
-        static member Deserialize<'T>(json: string, options: SerdeStjOptions) =
+        static member inline Deserialize<'T>(json: string, options: SerdeStjOptions) =
             Serde.Deserialize<'T>(json, options :> ISerdeOptions)
