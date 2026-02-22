@@ -72,7 +72,7 @@ type SerdeGeneratorTask() =
                     "open Serde.FS\n\n" +
                     "[<EntryPoint>]\n" +
                     "let main argv =\n" +
-                    "    // Force all F# module initializers so that registerEntryPoint calls execute\n" +
+                    "    // Force all F# module initializers so that entryPoint calls execute\n" +
                     "    for t in System.Reflection.Assembly.GetExecutingAssembly().GetTypes() do\n" +
                     "        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle)\n" +
                     "    SerdeApp.invokeRegisteredEntryPoint argv\n"

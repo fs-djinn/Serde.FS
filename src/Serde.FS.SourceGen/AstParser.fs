@@ -154,7 +154,7 @@ module AstParser =
         | [ "Serde"; "FS"; "SerdeApp"; "entryPoint" ] -> true
         | _ -> false
 
-    /// Recursively check if an expression contains a call to SerdeApp.registerEntryPoint.
+    /// Recursively check if an expression contains a call to SerdeApp.entryPoint.
     let rec private exprContainsEntryPointRegistration (expr: SynExpr) =
         match expr with
         | SynExpr.App(_, _, funcExpr, argExpr, _) ->
@@ -186,7 +186,7 @@ module AstParser =
                     exprContainsEntryPointRegistration expr)
             | _ -> false)
 
-    /// Check if source text contains a call to SerdeApp.registerEntryPoint.
+    /// Check if source text contains a call to SerdeApp.entryPoint.
     let hasEntryPointRegistration (filePath: string) (sourceText: string) : bool =
         let source = SourceText.ofString sourceText
 
@@ -204,7 +204,7 @@ module AstParser =
                 declsContainEntryPointRegistration decls)
         | _ -> false
 
-    /// Check if a source file contains a call to SerdeApp.registerEntryPoint.
+    /// Check if a source file contains a call to SerdeApp.entryPoint.
     let hasEntryPointRegistrationInFile (filePath: string) : bool =
         let sourceText = System.IO.File.ReadAllText(filePath)
         hasEntryPointRegistration filePath sourceText
