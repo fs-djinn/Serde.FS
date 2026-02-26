@@ -1,0 +1,243 @@
+namespace Serde.FS.SourceGen
+
+open Serde.FS.TypeKindTypes
+open FSharp.Compiler.CodeAnalysis
+open FSharp.Compiler.Syntax
+open FSharp.Compiler.Text
+
+module TypeKindExtractor =
+
+    let private checker = FSharpChecker.Create()
+
+    let private primitiveMap =
+        Map.ofList [
+            "unit", Unit
+            "bool", Bool
+            "sbyte", Int8; "int8", Int8
+            "int16", Int16
+            "int", Int32; "int32", Int32
+            "int64", Int64
+            "byte", UInt8; "uint8", UInt8
+            "uint16", UInt16
+            "uint32", UInt32
+            "uint64", UInt64
+            "float32", Float32; "single", Float32
+            "float", Float64; "double", Float64
+            "decimal", Decimal
+            "string", String
+            "System.Guid", Guid; "Guid", Guid
+            "System.DateTime", DateTime; "DateTime", DateTime
+            "System.DateTimeOffset", DateTimeOffset; "DateTimeOffset", DateTimeOffset
+            "System.TimeSpan", TimeSpan; "TimeSpan", TimeSpan
+            "System.DateOnly", DateOnly; "DateOnly", DateOnly
+            "System.TimeOnly", TimeOnly; "TimeOnly", TimeOnly
+        ]
+
+    let private optionNames = set [ "option"; "Option"; "FSharp.Core.option" ]
+    let private listNames = set [ "list"; "List"; "FSharp.Collections.list" ]
+    let private arrayNames = set [ "array"; "Array" ]
+    let private setNames = set [ "Set"; "FSharp.Collections.Set" ]
+    let private mapNames = set [ "Map"; "FSharp.Collections.Map" ]
+
+    let private identToString (idents: LongIdent) =
+        idents |> List.map (fun i -> i.idText) |> String.concat "."
+
+    let rec private synTypeToTypeInfo (synType: SynType) : TypeInfo =
+        match synType with
+        | SynType.LongIdent(SynLongIdent(id = idents)) ->
+            let name = identToString idents
+            match Map.tryFind name primitiveMap with
+            | Some pk ->
+                { Namespace = None; EnclosingModules = []; TypeName = name; Kind = Primitive pk }
+            | None ->
+                { Namespace = None; EnclosingModules = []; TypeName = name; Kind = Record [] }
+
+        | SynType.App(typeName, _, typeArgs, _, _, _isPostfix, _) ->
+            let baseName =
+                match typeName with
+                | SynType.LongIdent(SynLongIdent(id = idents)) -> identToString idents
+                | _ -> "unknown"
+
+            if optionNames.Contains baseName then
+                match typeArgs with
+                | [inner] ->
+                    { Namespace = None; EnclosingModules = []; TypeName = "option"
+                      Kind = Option(synTypeToTypeInfo inner) }
+                | _ ->
+                    { Namespace = None; EnclosingModules = []; TypeName = baseName; Kind = Record [] }
+
+            elif listNames.Contains baseName then
+                match typeArgs with
+                | [inner] ->
+                    { Namespace = None; EnclosingModules = []; TypeName = "list"
+                      Kind = List(synTypeToTypeInfo inner) }
+                | _ ->
+                    { Namespace = None; EnclosingModules = []; TypeName = baseName; Kind = Record [] }
+
+            elif arrayNames.Contains baseName then
+                match typeArgs with
+                | [inner] ->
+                    { Namespace = None; EnclosingModules = []; TypeName = "array"
+                      Kind = Array(synTypeToTypeInfo inner) }
+                | _ ->
+                    { Namespace = None; EnclosingModules = []; TypeName = baseName; Kind = Record [] }
+
+            elif setNames.Contains baseName then
+                match typeArgs with
+                | [inner] ->
+                    { Namespace = None; EnclosingModules = []; TypeName = "Set"
+                      Kind = Set(synTypeToTypeInfo inner) }
+                | _ ->
+                    { Namespace = None; EnclosingModules = []; TypeName = baseName; Kind = Record [] }
+
+            elif mapNames.Contains baseName then
+                match typeArgs with
+                | [keyType; valueType] ->
+                    { Namespace = None; EnclosingModules = []; TypeName = "Map"
+                      Kind = Map(synTypeToTypeInfo keyType, synTypeToTypeInfo valueType) }
+                | _ ->
+                    { Namespace = None; EnclosingModules = []; TypeName = baseName; Kind = Record [] }
+
+            else
+                { Namespace = None; EnclosingModules = []; TypeName = baseName; Kind = Record [] }
+
+        | SynType.Tuple(_isStruct, segments, _) ->
+            let types =
+                segments
+                |> List.choose (fun seg ->
+                    match seg with
+                    | SynTupleTypeSegment.Type t -> Some t
+                    | _ -> None)
+            let fields =
+                types
+                |> List.mapi (fun i t ->
+                    { Name = sprintf "Item%d" (i + 1); Type = synTypeToTypeInfo t })
+            { Namespace = None; EnclosingModules = []; TypeName = "tuple"; Kind = Tuple fields }
+
+        | SynType.Array(_, elementType, _) ->
+            { Namespace = None; EnclosingModules = []; TypeName = "array"
+              Kind = Array(synTypeToTypeInfo elementType) }
+
+        | SynType.AnonRecd(_isStruct, fields, _) ->
+            let fieldInfos =
+                fields
+                |> List.map (fun (ident, synTy) ->
+                    { Name = ident.idText; Type = synTypeToTypeInfo synTy })
+            { Namespace = None; EnclosingModules = []; TypeName = ""; Kind = AnonymousRecord fieldInfos }
+
+        | SynType.Paren(innerType, _) ->
+            synTypeToTypeInfo innerType
+
+        | _ ->
+            { Namespace = None; EnclosingModules = []; TypeName = "unknown"; Kind = Record [] }
+
+    let private extractRecordFields (fields: SynField list) : FieldInfo list =
+        fields
+        |> List.map (fun (SynField(_, _, idOpt, fieldType, _, _, _, _, _)) ->
+            let name =
+                match idOpt with
+                | Some ident -> ident.idText
+                | None -> "unknown"
+            { Name = name; Type = synTypeToTypeInfo fieldType })
+
+    let private extractEnumCases (cases: SynEnumCase list) : (string * int) list =
+        cases
+        |> List.map (fun (SynEnumCase(_, SynIdent(ident, _), valueExpr, _, _, _)) ->
+            let value =
+                match valueExpr with
+                | SynExpr.Const(SynConst.Int32 v, _) -> v
+                | _ -> 0
+            (ident.idText, value))
+
+    let private extractUnionCaseFields (caseType: SynUnionCaseKind) : FieldInfo list =
+        match caseType with
+        | SynUnionCaseKind.Fields fields ->
+            fields
+            |> List.map (fun (SynField(_, _, idOpt, fieldType, _, _, _, _, _)) ->
+                let name =
+                    match idOpt with
+                    | Some ident -> ident.idText
+                    | None -> "Item"
+                { Name = name; Type = synTypeToTypeInfo fieldType })
+        | SynUnionCaseKind.FullType _ -> []
+
+    let private extractUnionCases (cases: SynUnionCase list) : UnionCase list =
+        cases
+        |> List.mapi (fun i (SynUnionCase(_, SynIdent(ident, _), caseType, _, _, _, _)) ->
+            { CaseName = ident.idText
+              Fields = extractUnionCaseFields caseType
+              Tag = Some i })
+
+    let private extractNamespace (longId: LongIdent) =
+        longId |> List.map (fun i -> i.idText) |> String.concat "."
+
+    let private processTypeDefn (ns: string option) (modules: string list) (typeDefn: SynTypeDefn) : TypeInfo option =
+        let (SynTypeDefn(typeInfo = synComponentInfo; typeRepr = typeRepr)) = typeDefn
+        let (SynComponentInfo(longId = typeNameIdent)) = synComponentInfo
+        let typeName = typeNameIdent |> List.map (fun i -> i.idText) |> String.concat "."
+
+        match typeRepr with
+        | SynTypeDefnRepr.Simple(SynTypeDefnSimpleRepr.Record(_, fields, _), _) ->
+            Some {
+                Namespace = ns
+                EnclosingModules = modules
+                TypeName = typeName
+                Kind = Record(extractRecordFields fields)
+            }
+        | SynTypeDefnRepr.Simple(SynTypeDefnSimpleRepr.Union(_, cases, _), _) ->
+            Some {
+                Namespace = ns
+                EnclosingModules = modules
+                TypeName = typeName
+                Kind = Union(extractUnionCases cases)
+            }
+        | SynTypeDefnRepr.Simple(SynTypeDefnSimpleRepr.Enum(cases, _), _) ->
+            Some {
+                Namespace = ns
+                EnclosingModules = modules
+                TypeName = typeName
+                Kind = Enum(extractEnumCases cases)
+            }
+        | _ -> None
+
+    let rec private walkDecls (ns: string option) (modules: string list) (decls: SynModuleDecl list) : TypeInfo list =
+        [ for decl in decls do
+            match decl with
+            | SynModuleDecl.Types(typeDefns, _) ->
+                for typeDefn in typeDefns do
+                    match processTypeDefn ns modules typeDefn with
+                    | Some info -> yield info
+                    | None -> ()
+            | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo(longId = moduleIdent); decls = nestedDecls) ->
+                let moduleName = moduleIdent |> List.map (fun i -> i.idText) |> String.concat "."
+                yield! walkDecls ns (modules @ [moduleName]) nestedDecls
+            | _ -> () ]
+
+    let private parseTree (filePath: string) (sourceText: string) : TypeInfo list =
+        let source = SourceText.ofString sourceText
+
+        let parsingOptions =
+            { FSharpParsingOptions.Default with
+                SourceFiles = [| filePath |] }
+
+        let parseResults =
+            checker.ParseFile(filePath, source, parsingOptions)
+            |> Async.RunSynchronously
+
+        match parseResults.ParseTree with
+        | ParsedInput.ImplFile(ParsedImplFileInput(contents = modules)) ->
+            [ for SynModuleOrNamespace(longId = nsId; kind = kind; decls = decls) in modules do
+                match kind with
+                | SynModuleOrNamespaceKind.NamedModule ->
+                    let moduleNames = nsId |> List.map (fun i -> i.idText)
+                    yield! walkDecls None moduleNames decls
+                | SynModuleOrNamespaceKind.DeclaredNamespace ->
+                    let ns = Some(extractNamespace nsId)
+                    yield! walkDecls ns [] decls
+                | _ ->
+                    yield! walkDecls None [] decls ]
+        | _ -> []
+
+    /// Extract TypeInfo metadata for all types in the given F# source.
+    let extractTypes (filePath: string) (sourceText: string) : TypeInfo list =
+        parseTree filePath sourceText
