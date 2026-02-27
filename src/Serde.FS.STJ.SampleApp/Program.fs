@@ -17,6 +17,8 @@ type Person = {
     LuckyNumbers: int Set 
     Colors: string[]
     Pets: Pet list
+    Position: float * float
+
 }
 
 let run argv =
@@ -28,6 +30,7 @@ let run argv =
         LuckyNumbers = Set [ 1; 2; 3 ] 
         Colors = [| "Red"; "Green"; "Blue" |]
         Pets = [ { Name = "Fido"; Species = "Dog" }; { Name = "Whiskers"; Species = "Cat" } ]
+        Position = 10.5, 20.5
     }
     let json = Serde.Serialize person
     printfn "Serialized: %s" json
