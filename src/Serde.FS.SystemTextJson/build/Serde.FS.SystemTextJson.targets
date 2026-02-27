@@ -4,11 +4,11 @@
 
   <Target Name="SerdeGenerate" BeforeTargets="CoreCompile">
 
-	<Message Text="Serde.FS.STJ.targets loaded" Importance="High" />
+	<Message Text="Serde.FS.SystemTextJson.targets loaded" Importance="High" />
 
     <SerdeGeneratorTask SourceFiles="@(Compile)" OutputDir="$(IntermediateOutputPath)serde-generated/"
-                        EmitterAssemblyPath="$(MSBuildThisFileDirectory)../analyzers/dotnet/fs/Serde.FS.STJ.dll"
-                        EmitterTypeName="Serde.FS.STJ.StjCodeEmitter" />
+                        EmitterAssemblyPath="$(MSBuildThisFileDirectory)../analyzers/dotnet/fs/Serde.FS.SystemTextJson.dll"
+                        EmitterTypeName="Serde.FS.SystemTextJson.StjCodeEmitter" />
     <!-- Add generated files to Compile, inserted after user code -->
     <ItemGroup>
       <Compile Include="$(IntermediateOutputPath)serde-generated/**/*.fs"

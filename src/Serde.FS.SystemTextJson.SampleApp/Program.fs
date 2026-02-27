@@ -1,7 +1,7 @@
 module Program
 
 open Serde.FS
-open Serde.FS.STJ
+open Serde.FS.SystemTextJson
 
 [<Serde>]
 type Color =
@@ -10,7 +10,7 @@ type Color =
     | Blue = 3
 
 [<Serde>]
-type Address = { Street: string; City: string }
+type Address = { Street: string; City: string; Zip: string }
 
 type Name = { Name: string }
 
@@ -47,7 +47,7 @@ let run argv =
     let person = {
         Name = "John"
         Age = 30
-        Address = Some { Street = "123 Main St"; City = "Springfield" }
+        Address = Some { Street = "123 Main St"; City = "Springfield"; Zip = "12345" }
         LuckyNumbers = Set [ 1; 2; 3 ]
         Colors = [| Color.Red; Color.Green; Color.Blue |]
         Pets = pets

@@ -1,4 +1,4 @@
-module Serde.FS.STJ.Tests.SerdeTests
+module Serde.FS.SystemTextJson.Tests.SerdeTests
 
 open NUnit.Framework
 open Serde.FS
@@ -23,13 +23,13 @@ type TestResolver() =
 let OneTimeSetup () =
     // Register only in generatedResolvers (for strict mode checking),
     // not in TypeInfoResolverChain (which would need complete metadata for STJ serialization).
-    Serde.FS.STJ.StjOptionsCache.generatedResolvers.Add(TestResolver())
+    Serde.FS.SystemTextJson.StjOptionsCache.generatedResolvers.Add(TestResolver())
 
 [<SetUp>]
 let Setup () =
-    Serde.FS.STJ.SerdeStj.useAsDefault()
+    Serde.FS.SystemTextJson.SerdeStj.useAsDefault()
     // Existing tests use reflection (no source gen), so allow it.
-    Serde.FS.STJ.SerdeStj.allowReflectionFallback()
+    Serde.FS.SystemTextJson.SerdeStj.allowReflectionFallback()
 
 [<Test>]
 let ``Serialize and deserialize a record`` () =
@@ -69,7 +69,7 @@ let ``Strict mode throws on deserialize for type without generated metadata`` ()
 [<Test>]
 let ``Strict mode succeeds after allowReflectionFallback`` () =
     Serde.Strict <- true
-    Serde.FS.STJ.SerdeStj.allowReflectionFallback()
+    Serde.FS.SystemTextJson.SerdeStj.allowReflectionFallback()
     let json = Serde.Serialize { FName = "Jordan"; LName = "Marr" }
     json |> string =! """{"FName":"Jordan","LName":"Marr"}"""
 

@@ -1,4 +1,4 @@
-namespace Serde.FS.STJ
+namespace Serde.FS.SystemTextJson
 
 open System.Text.Json
 open System.Text.Json.Serialization.Metadata

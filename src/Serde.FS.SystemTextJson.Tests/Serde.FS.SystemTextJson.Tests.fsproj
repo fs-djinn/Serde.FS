@@ -26,7 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
     <ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj" />
-    <ProjectReference Include="..\Serde.FS.STJ\Serde.FS.STJ.fsproj" />
+    <ProjectReference Include="..\Serde.FS.SystemTextJson\Serde.FS.SystemTextJson.fsproj" />
   </ItemGroup>
 
 </Project>

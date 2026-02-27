@@ -1,9 +1,9 @@
-module Serde.FS.STJ.Tests.StjCodeEmitterTests
+module Serde.FS.SystemTextJson.Tests.StjCodeEmitterTests
 
 open NUnit.Framework
 open Serde.FS
 open Serde.FS.TypeKindTypes
-open Serde.FS.STJ
+open Serde.FS.SystemTextJson
 
 let private emitter = StjCodeEmitter() :> ISerdeCodeEmitter
 let private resolverEmitter = StjCodeEmitter() :> ISerdeResolverEmitter

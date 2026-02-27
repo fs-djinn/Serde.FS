@@ -1,4 +1,4 @@
-module Serde.FS.STJ.SerdeStj
+module Serde.FS.SystemTextJson.SerdeStj
 
 open Serde.FS
 

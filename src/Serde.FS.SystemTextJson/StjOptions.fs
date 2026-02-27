@@ -1,4 +1,4 @@
-namespace Serde.FS.STJ
+namespace Serde.FS.SystemTextJson
 
 open Serde.FS
 

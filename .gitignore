@@ -58,4 +58,4 @@ nunit-*.xml
 
 # Visual Studio
 .vs/
-/src/Serde.FS.STJ/analyzers/dotnet/fs/*.dll
+/src/Serde.FS.SystemTextJson/analyzers/dotnet/fs/*.dll

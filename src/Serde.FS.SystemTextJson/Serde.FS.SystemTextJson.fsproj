@@ -7,19 +7,19 @@
 
 	<PropertyGroup>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-		<PackageId>Serde.FS.STJ</PackageId>
-		<Version>0.1.1-debug.31</Version>
+		<PackageId>Serde.FS.SystemTextJson</PackageId>
+		<Version>0.1.1-debug.33</Version>
 		<Authors>Jordan Marr</Authors>
 		<Description>System.Text.Json backend for Serde.FS</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Include="build\Serde.FS.STJ.targets" Pack="true" PackagePath="build\" />
+		<None Include="build\Serde.FS.SystemTextJson.targets" Pack="true" PackagePath="build\" />
 		<None Include="analyzers\dotnet\fs\Serde.FS.SourceGen.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\FSharp.Core.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\FSharp.Compiler.Service.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\Serde.FS.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
-		<None Include="analyzers\dotnet\fs\Serde.FS.STJ.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
+		<None Include="analyzers\dotnet\fs\Serde.FS.SystemTextJson.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 	</ItemGroup>
 
 	<Target Name="CopyAnalyzerDependencies" AfterTargets="Build">
@@ -36,13 +36,13 @@
 		<Copy SourceFiles="$(ProjectDir)..\Serde.FS\bin\$(Configuration)\net8.0\Serde.FS.dll"
 			  DestinationFolder="$(ProjectDir)analyzers/dotnet/fs/" SkipUnchangedFiles="true" />
 
-		<!-- Copy Serde.FS.STJ.dll to analyzers (needed for StjCodeEmitter at build time) -->
-		<Copy SourceFiles="$(ProjectDir)bin\$(Configuration)\net8.0\Serde.FS.STJ.dll"
+		<!-- Copy Serde.FS.SystemTextJson.dll to analyzers (needed for StjCodeEmitter at build time) -->
+		<Copy SourceFiles="$(ProjectDir)bin\$(Configuration)\net8.0\Serde.FS.SystemTextJson.dll"
 			  DestinationFolder="$(ProjectDir)analyzers/dotnet/fs/" SkipUnchangedFiles="true" />
 	</Target>
 
 	<ItemGroup>
-    <InternalsVisibleTo Include="Serde.FS.STJ.Tests" />
+    <InternalsVisibleTo Include="Serde.FS.SystemTextJson.Tests" />
   </ItemGroup>
 
 	<ItemGroup>

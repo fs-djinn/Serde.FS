@@ -1,4 +1,4 @@
-namespace Serde.FS.STJ
+namespace Serde.FS.SystemTextJson
 
 open System.Text
 open Serde.FS
@@ -474,7 +474,7 @@ module internal StjCodeEmitterImpl =
 
             append "            else null"
             append ""
-            append "do Serde.FS.STJ.SerdeStjResolverRegistry.registerResolver(SerdeStjGeneratedResolver())"
+            append "do Serde.FS.SystemTextJson.SerdeStjResolverRegistry.registerResolver(SerdeStjGeneratedResolver())"
 
             Some (sb.ToString())
 

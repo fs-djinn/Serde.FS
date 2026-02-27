@@ -3,7 +3,7 @@
 namespace Serde.FS
 
 open Serde.FS
-open Serde.FS.STJ
+open Serde.FS.SystemTextJson
 
 [<AutoOpen>]
 module StjSerdeExtensions =

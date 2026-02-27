@@ -7,16 +7,16 @@ open System.Text.RegularExpressions
 open Fun.Build
 
 // Usage:
-//   dotnet fsi debug-stj.fsx              runs the "debug" pipeline (default)
-//   dotnet fsi debug-stj.fsx -- -p clean  runs the "clean" pipeline
+//   dotnet fsi debug-systemtextjson.fsx              runs the "debug" pipeline (default)
+//   dotnet fsi debug-systemtextjson.fsx -- -p clean  runs the "clean" pipeline
 
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
 let sourceGenProj = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
-let stjProj       = "src/Serde.FS.STJ/Serde.FS.STJ.fsproj"
-let sampleAppProj = "src/Serde.FS.STJ.SampleApp/Serde.FS.STJ.SampleApp.fsproj"
+let stjProj       = "src/Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj"
+let sampleAppProj = "src/Serde.FS.SystemTextJson.SampleApp/Serde.FS.SystemTextJson.SampleApp.fsproj"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -87,8 +87,8 @@ pipeline "debug" {
     stage "Update SampleApp package reference" {
         run (fun _ ->
             let version = readVersion stjProj
-            updatePackageRef sampleAppProj "Serde.FS.STJ" version
-            printfn $"Updated SampleApp to Serde.FS.STJ {version}"
+            updatePackageRef sampleAppProj "Serde.FS.SystemTextJson" version
+            printfn $"Updated SampleApp to Serde.FS.SystemTextJson {version}"
         )
     }
 
@@ -112,7 +112,7 @@ pipeline "clean" {
 
     stage "Delete debug packages" {
         run (fun _ ->
-            let dir = "src/Serde.FS.STJ/bin/Debug"
+            let dir = "src/Serde.FS.SystemTextJson/bin/Debug"
             if Directory.Exists(dir) then
                 for pkg in Directory.GetFiles(dir, "*-debug.*.nupkg") do
                     printfn $"  Deleting {pkg}"
@@ -125,7 +125,7 @@ pipeline "clean" {
             let cacheDir =
                 Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".nuget", "packages", "serde.fs.stj"
+                    ".nuget", "packages", "serde.fs.systemtextjson"
                 )
             if Directory.Exists(cacheDir) then
                 for dir in Directory.GetDirectories(cacheDir) do
@@ -137,7 +137,7 @@ pipeline "clean" {
 
     stage "Delete SampleApp obj/bin" {
         run (fun _ ->
-            for dir in [ "src/Serde.FS.STJ.SampleApp/obj"; "src/Serde.FS.STJ.SampleApp/bin" ] do
+            for dir in [ "src/Serde.FS.SystemTextJson.SampleApp/obj"; "src/Serde.FS.SystemTextJson.SampleApp/bin" ] do
                 if Directory.Exists(dir) then
                     printfn $"  Deleting {dir}"
                     Directory.Delete(dir, true)
