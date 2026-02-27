@@ -45,6 +45,7 @@ module private OptionDiscovery =
             Attributes = SerdeAttributes.empty
             Fields = None
             UnionCases = None
+            EnumCases = None
         }
 
 module private TupleDiscovery =
@@ -85,6 +86,7 @@ module private TupleDiscovery =
             Attributes = SerdeAttributes.empty
             Fields = None
             UnionCases = None
+            EnumCases = None
         }
 
 module private FieldTypeResolver =

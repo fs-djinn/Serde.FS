@@ -4,18 +4,24 @@ open Serde.FS
 open Serde.FS.STJ
 
 [<Serde>]
+type Color =
+    | Red = 1
+    | Green = 2
+    | Blue = 3
+
+[<Serde>]
 type Address = { Street: string; City: string }
 
 [<Serde>]
 type Pet = { Name: string; Species: string }
 
 [<Serde>]
-type Person = { 
+type Person = {
     Name: string
     Age: int
     Address: Address option
-    LuckyNumbers: int Set 
-    Colors: string[]
+    LuckyNumbers: int Set
+    Colors: Color[]
     Pets: Pet list
     Position: float * float
     PetMap: Map<string, Pet>
@@ -27,12 +33,12 @@ let run argv =
         { Name = "Fido"; Species = "Dog" }
         { Name = "Whiskers"; Species = "Cat" }
     ]
-    let person = {  
+    let person = {
         Name = "John"
         Age = 30
         Address = Some { Street = "123 Main St"; City = "Springfield" }
-        LuckyNumbers = Set [ 1; 2; 3 ] 
-        Colors = [| "Red"; "Green"; "Blue" |]
+        LuckyNumbers = Set [ 1; 2; 3 ]
+        Colors = [| Color.Red; Color.Green; Color.Blue |]
         Pets = pets
         Position = 10.5, 20.5
         PetMap = pets |> List.map (fun p -> p.Name, p) |> Map.ofList

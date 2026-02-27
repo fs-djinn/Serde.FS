@@ -28,6 +28,7 @@ let ``CodeEmitter delegates to ISerdeCodeEmitter`` () =
             { Name = "FName"; RawName = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = [] }; Attributes = SerdeAttributes.empty; Capability = Both }
         ]
         UnionCases = None
+        EnumCases = None
     }
 
     let code = CodeEmitter.emit emitter info
@@ -52,6 +53,7 @@ let ``DebugEmitter emits debug comment`` () =
             { Name = "FName"; RawName = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = [] }; Attributes = SerdeAttributes.empty; Capability = Both }
         ]
         UnionCases = None
+        EnumCases = None
     }
 
     let code = emitter.Emit(info)

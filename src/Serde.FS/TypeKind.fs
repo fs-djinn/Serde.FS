@@ -32,7 +32,7 @@ module TypeKindTypes =
         | Array of inner: TypeInfo
         | Set of inner: TypeInfo
         | Map of key: TypeInfo * value: TypeInfo
-        | Enum of namesAndValues: (string * int) list
+        | Enum of cases: EnumCase list
         | AnonymousRecord of fields: FieldInfo list
         | Union of cases: UnionCase list
 
@@ -47,6 +47,12 @@ module TypeKindTypes =
     and FieldInfo = {
         Name: string
         Type: TypeInfo
+        Attributes: AttributeInfo list
+    }
+
+    and EnumCase = {
+        CaseName: string
+        Value: int
         Attributes: AttributeInfo list
     }
 

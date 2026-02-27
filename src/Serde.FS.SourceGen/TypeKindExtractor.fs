@@ -210,14 +210,14 @@ module TypeKindExtractor =
                 | None -> "unknown"
             { Name = name; Type = synTypeToTypeInfo fieldType; Attributes = extractAttributes attrs })
 
-    let private extractEnumCases (cases: SynEnumCase list) : (string * int) list =
+    let private extractEnumCases (cases: SynEnumCase list) : EnumCase list =
         cases
-        |> List.map (fun (SynEnumCase(_, SynIdent(ident, _), valueExpr, _, _, _)) ->
+        |> List.map (fun (SynEnumCase(attrs, SynIdent(ident, _), valueExpr, _, _, _)) ->
             let value =
                 match valueExpr with
                 | SynExpr.Const(SynConst.Int32 v, _) -> v
                 | _ -> 0
-            (ident.idText, value))
+            { CaseName = ident.idText; Value = value; Attributes = extractAttributes attrs })
 
     let private extractUnionCaseFields (caseType: SynUnionCaseKind) : FieldInfo list =
         match caseType with

@@ -30,6 +30,14 @@ type SerdeFieldInfo = {
     Capability: SerdeCapability
 }
 
+type SerdeEnumCaseInfo = {
+    CaseName: string
+    RawCaseName: string
+    Value: int
+    Attributes: SerdeAttributes
+    Capability: SerdeCapability
+}
+
 type SerdeUnionCaseInfo = {
     CaseName: string
     RawCaseName: string
@@ -44,6 +52,7 @@ type SerdeTypeInfo = {
     Attributes: SerdeAttributes
     Fields: SerdeFieldInfo list option
     UnionCases: SerdeUnionCaseInfo list option
+    EnumCases: SerdeEnumCaseInfo list option
 }
 
 module SerdeMetadataBuilder =
@@ -120,21 +129,35 @@ module SerdeMetadataBuilder =
             Attributes = attrs
         }
 
+    let private buildSerdeEnumCaseInfo (typeCap: SerdeCapability) (ec: EnumCase) : SerdeEnumCaseInfo =
+        let attrs = buildSerdeAttributes ec.Attributes
+        let effectiveName = attrs.Rename |> Option.defaultValue ec.CaseName
+        {
+            CaseName = effectiveName
+            RawCaseName = ec.CaseName
+            Value = ec.Value
+            Attributes = attrs
+            Capability = resolveFieldCapability typeCap attrs
+        }
+
     let buildSerdeTypeInfo (ti: TypeInfo) : SerdeTypeInfo =
         let capability = resolveCapability ti.Attributes
         let typeAttrs = buildSerdeAttributes ti.Attributes
-        let fields, unionCases =
+        let fields, unionCases, enumCases =
             match ti.Kind with
             | Record fields | AnonymousRecord fields ->
-                Some (fields |> List.map (buildSerdeFieldInfo capability)), None
+                Some (fields |> List.map (buildSerdeFieldInfo capability)), None, None
             | Union cases ->
-                None, Some (cases |> List.map (buildSerdeUnionCaseInfo capability))
+                None, Some (cases |> List.map (buildSerdeUnionCaseInfo capability)), None
+            | Enum cases ->
+                None, None, Some (cases |> List.map (buildSerdeEnumCaseInfo capability))
             | _ ->
-                None, None
+                None, None, None
         {
             Raw = ti
             Capability = capability
             Attributes = typeAttrs
             Fields = fields
             UnionCases = unionCases
+            EnumCases = enumCases
         }

@@ -33,6 +33,7 @@ let private mkOptionInfo (inner: TypeInfo) : SerdeTypeInfo =
         Attributes = SerdeAttributes.empty
         Fields = None
         UnionCases = None
+        EnumCases = None
     }
 
 /// Helper to build a SerdeTypeInfo for a simple record.
@@ -51,6 +52,7 @@ let private mkRecordInfo ns typeName cap (fields: SerdeFieldInfo list) : SerdeTy
         Attributes = SerdeAttributes.empty
         Fields = Some fields
         UnionCases = None
+        EnumCases = None
     }
 
 [<Test>]
@@ -318,6 +320,7 @@ let private mkTupleInfo (elements: TypeInfo list) : SerdeTypeInfo =
         Attributes = SerdeAttributes.empty
         Fields = None
         UnionCases = None
+        EnumCases = None
     }
 
 [<Test>]
@@ -396,3 +399,105 @@ let ``typeInfoToFqFSharpType produces parenthesized tuple nested in option`` () 
     let optTi = mkOptionType ti
     let fq = TypeKindTypes.typeInfoToFqFSharpType optTi
     Assert.That(fq, Is.EqualTo("(int * string) option"))
+
+// --- Enum tests ---
+
+/// Helper to build a SerdeTypeInfo for an enum type.
+let private mkEnumInfo ns typeName (cases: SerdeEnumCaseInfo list) : SerdeTypeInfo =
+    let rawCases =
+        cases |> List.map (fun c ->
+            { CaseName = c.RawCaseName; Value = c.Value; Attributes = [] } : TypeKindTypes.EnumCase)
+    {
+        Raw = {
+            Namespace = ns
+            EnclosingModules = []
+            TypeName = typeName
+            Kind = Enum rawCases
+            Attributes = []
+        }
+        Capability = Both
+        Attributes = SerdeAttributes.empty
+        Fields = None
+        UnionCases = None
+        EnumCases = Some cases
+    }
+
+/// Helper to build a SerdeEnumCaseInfo.
+let private mkEnumCase name value : SerdeEnumCaseInfo =
+    { CaseName = name; RawCaseName = name; Value = value; Attributes = SerdeAttributes.empty; Capability = Both }
+
+/// Helper to build a SerdeEnumCaseInfo with a rename.
+let private mkEnumCaseRenamed rawName effectiveName value : SerdeEnumCaseInfo =
+    { CaseName = effectiveName; RawCaseName = rawName; Value = value
+      Attributes = { SerdeAttributes.empty with Rename = Some effectiveName }; Capability = Both }
+
+[<Test>]
+let ``Emits converter for basic enum`` () =
+    let info = mkEnumInfo (Some "TestNs") "Color" [
+        mkEnumCase "Red" 1
+        mkEnumCase "Blue" 2
+    ]
+
+    let code = emitter.Emit(info)
+    Assert.That(code, Does.Contain("module rec Serde.Generated.Color"))
+    Assert.That(code, Does.Contain("ColorConverter"))
+    Assert.That(code, Does.Contain("JsonConverter<TestNs.Color>"))
+    Assert.That(code, Does.Contain("CreateValueInfo"))
+    Assert.That(code, Does.Contain("""if s = "Red" then TestNs.Color.Red"""))
+    Assert.That(code, Does.Contain("""elif s = "Blue" then TestNs.Color.Blue"""))
+    Assert.That(code, Does.Contain("""if value = TestNs.Color.Red then writer.WriteStringValue("Red")"""))
+    Assert.That(code, Does.Contain("""elif value = TestNs.Color.Blue then writer.WriteStringValue("Blue")"""))
+    Assert.That(code, Does.Contain("JsonException"))
+
+[<Test>]
+let ``Emits converter for enum with renamed case`` () =
+    let info = mkEnumInfo (Some "TestNs") "Color" [
+        mkEnumCaseRenamed "Red" "Crimson" 1
+        mkEnumCase "Blue" 2
+    ]
+
+    let code = emitter.Emit(info)
+    // Deserialization uses effective name
+    Assert.That(code, Does.Contain("""if s = "Crimson" then TestNs.Color.Red"""))
+    // Serialization compares raw case, writes effective name
+    Assert.That(code, Does.Contain("""if value = TestNs.Color.Red then writer.WriteStringValue("Crimson")"""))
+    Assert.That(code, Does.Contain("""elif s = "Blue" then TestNs.Color.Blue"""))
+
+[<Test>]
+let ``EmitResolver includes enum type`` () =
+    let enumInfo = mkEnumInfo (Some "TestNs") "Color" [
+        mkEnumCase "Red" 1
+        mkEnumCase "Blue" 2
+    ]
+    let recordInfo = mkRecordInfo (Some "TestNs") "Person" Both [
+        mkField "Name" "string" String
+    ]
+    let types = [ recordInfo; enumInfo ]
+
+    let result = resolverEmitter.EmitResolver(types)
+    Assert.That(result.IsSome, Is.True)
+    let code = result.Value
+    Assert.That(code, Does.Contain("typeof<TestNs.Color>"))
+    Assert.That(code, Does.Contain("colorJsonTypeInfo"))
+    Assert.That(code, Does.Contain("open Serde.Generated.Color"))
+
+[<Test>]
+let ``Full pipeline: parse then emit enum`` () =
+    let source = """
+namespace TestApp
+
+[<Serde>]
+type Color =
+    | Red = 1
+    | Green = 2
+    | Blue = 3
+"""
+    let types = Serde.FS.SourceGen.AstParser.parseSource "/test.fs" source
+    Assert.That(types.Length, Is.EqualTo(1))
+
+    let code = emitter.Emit(types.[0])
+    Assert.That(code, Does.Contain("module rec Serde.Generated.Color"))
+    Assert.That(code, Does.Contain("ColorConverter"))
+    Assert.That(code, Does.Contain("""if s = "Red" then TestApp.Color.Red"""))
+    Assert.That(code, Does.Contain("""elif s = "Green" then TestApp.Color.Green"""))
+    Assert.That(code, Does.Contain("""elif s = "Blue" then TestApp.Color.Blue"""))

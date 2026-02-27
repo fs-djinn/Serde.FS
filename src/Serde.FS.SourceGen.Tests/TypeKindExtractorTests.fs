@@ -218,9 +218,12 @@ type Color =
     match t.Kind with
     | Enum cases ->
         Assert.That(cases.Length, Is.EqualTo(3))
-        Assert.That(cases.[0], Is.EqualTo(("Red", 0)))
-        Assert.That(cases.[1], Is.EqualTo(("Green", 1)))
-        Assert.That(cases.[2], Is.EqualTo(("Blue", 2)))
+        Assert.That(cases.[0].CaseName, Is.EqualTo("Red"))
+        Assert.That(cases.[0].Value, Is.EqualTo(0))
+        Assert.That(cases.[1].CaseName, Is.EqualTo("Green"))
+        Assert.That(cases.[1].Value, Is.EqualTo(1))
+        Assert.That(cases.[2].CaseName, Is.EqualTo("Blue"))
+        Assert.That(cases.[2].Value, Is.EqualTo(2))
     | other -> Assert.Fail(sprintf "Expected Enum kind, got %A" other)
 
 [<Test>]
@@ -395,6 +398,30 @@ type X = { A: int }
     let names = t.Attributes |> List.map (fun a -> a.Name)
     Assert.That(names, Does.Contain("ObsoleteAttribute"))
     Assert.That(names, Does.Contain("Serde.FS.SerdeRenameAttribute"))
+
+[<Test>]
+let ``Extracts enum case attributes`` () =
+    let source = """
+namespace TestNs
+
+type Color =
+    | [<Serde.FS.SerdeRename("Crimson")>] Red = 1
+    | Blue = 2
+"""
+    let types = TypeKindExtractor.extractTypes "/test.fs" source
+    Assert.That(types.Length, Is.EqualTo(1))
+
+    match types.[0].Kind with
+    | Enum cases ->
+        Assert.That(cases.Length, Is.EqualTo(2))
+        Assert.That(cases.[0].CaseName, Is.EqualTo("Red"))
+        Assert.That(cases.[0].Value, Is.EqualTo(1))
+        Assert.That(cases.[0].Attributes.Length, Is.EqualTo(1))
+        Assert.That(cases.[0].Attributes.[0].Name, Is.EqualTo("Serde.FS.SerdeRenameAttribute"))
+        Assert.That(cases.[0].Attributes.[0].ConstructorArgs, Is.EqualTo([box "Crimson"]))
+        Assert.That(cases.[1].CaseName, Is.EqualTo("Blue"))
+        Assert.That(cases.[1].Attributes, Is.Empty)
+    | other -> Assert.Fail(sprintf "Expected Enum kind, got %A" other)
 
 [<Test>]
 let ``Attribute with no args produces empty ConstructorArgs and NamedArgs`` () =
