@@ -18,19 +18,24 @@ type Person = {
     Colors: string[]
     Pets: Pet list
     Position: float * float
-
+    PetMap: Map<string, Pet>
 }
 
 let run argv =
     SerdeStj.useAsDefault()
-    let person = { 
+    let pets = [
+        { Name = "Fido"; Species = "Dog" }
+        { Name = "Whiskers"; Species = "Cat" }
+    ]
+    let person = {  
         Name = "John"
         Age = 30
         Address = Some { Street = "123 Main St"; City = "Springfield" }
         LuckyNumbers = Set [ 1; 2; 3 ] 
         Colors = [| "Red"; "Green"; "Blue" |]
-        Pets = [ { Name = "Fido"; Species = "Dog" }; { Name = "Whiskers"; Species = "Cat" } ]
+        Pets = pets
         Position = 10.5, 20.5
+        PetMap = pets |> List.map (fun p -> p.Name, p) |> Map.ofList
     }
     let json = Serde.Serialize person
     printfn "Serialized: %s" json
