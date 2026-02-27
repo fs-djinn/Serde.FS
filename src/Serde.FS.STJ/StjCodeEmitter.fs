@@ -92,16 +92,16 @@ module internal StjCodeEmitterImpl =
         let fieldAssignments =
             fields
             |> List.mapi (fun i field ->
-                let fsharpType = TypeKindTypes.typeInfoToFSharpString field.Type
-                sprintf "%s.%s = args.[%d] :?> %s" fqn field.RawName i fsharpType)
+                let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+                sprintf "%s = args.[%d] :?> %s" field.RawName i fsharpType)
             |> String.concat "; "
-        appendf "                        { %s })," fieldAssignments
+        appendf "                        { %s } : %s)," fieldAssignments fqn
 
         // ConstructorParameterMetadataInitializer: describes each constructor parameter
         appendf "                    ConstructorParameterMetadataInitializer = (fun _ ->"
         appendf "                        [|"
         for i, field in fields |> List.mapi (fun i x -> i, x) do
-            let fsharpType = TypeKindTypes.typeInfoToFSharpString field.Type
+            let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
             appendf "                            JsonParameterInfoValues(Name = \"%s\", ParameterType = typeof<%s>, Position = %d)"
                 (lowerFirst field.Name) fsharpType i
         appendf "                        |]"
@@ -111,7 +111,7 @@ module internal StjCodeEmitterImpl =
         appendf "                        [|"
 
         for field in fields do
-            let fsharpType = TypeKindTypes.typeInfoToFSharpString field.Type
+            let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
             appendf "                            JsonMetadataServices.CreatePropertyInfo<%s>(" fsharpType
             appendf "                                options,"
             appendf "                                JsonPropertyInfoValues<%s>(" fsharpType
@@ -129,7 +129,7 @@ module internal StjCodeEmitterImpl =
         appendf "                    writer.WriteStartObject()"
 
         for field in fields do
-            let fsharpType = TypeKindTypes.typeInfoToFSharpString field.Type
+            let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
             let call = writerCall field.Name field.RawName fsharpType
             append call
 

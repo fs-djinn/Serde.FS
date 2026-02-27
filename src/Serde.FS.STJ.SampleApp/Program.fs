@@ -4,11 +4,14 @@ open Serde.FS
 open Serde.FS.STJ
 
 [<Serde>]
-type Person = { Name: string; Age: int; LuckyNumbers: Option<int Set> }
+type Address = { Street: string; City: string }
+
+[<Serde>]
+type Person = { Name: string; Age: int; Address: Address; LuckyNumbers: Option<int Set> }
 
 let run argv =
     SerdeStj.useAsDefault()
-    let person = { Name = "John"; Age = 30; LuckyNumbers = Some (Set [ 1; 2; 3 ]) }
+    let person = { Name = "John"; Age = 30; Address = { Street = "123 Main St"; City = "Springfield" }; LuckyNumbers = Some (Set [ 1; 2; 3 ]) }
     let json = Serde.Serialize person
     printfn "Serialized: %s" json
     let deserialized: Person = Serde.Deserialize json

@@ -40,6 +40,36 @@ module private OptionDiscovery =
             UnionCases = None
         }
 
+module private FieldTypeResolver =
+    open Serde.FS.TypeKindTypes
+
+    /// Recursively resolves unqualified type references in a TypeInfo
+    /// using a lookup map built from all parsed types.
+    let rec resolveTypeInfo (lookup: Map<string, TypeInfo>) (ti: TypeInfo) : TypeInfo =
+        match ti.Kind with
+        | Primitive _ -> ti
+        | Record _ | AnonymousRecord _ | Union _ | Enum _ ->
+            if ti.Namespace.IsNone then
+                match Map.tryFind ti.TypeName lookup with
+                | Some resolved ->
+                    { ti with Namespace = resolved.Namespace; EnclosingModules = resolved.EnclosingModules }
+                | None -> ti
+            else ti
+        | Option inner -> { ti with Kind = Option (resolveTypeInfo lookup inner) }
+        | List inner -> { ti with Kind = List (resolveTypeInfo lookup inner) }
+        | Array inner -> { ti with Kind = Array (resolveTypeInfo lookup inner) }
+        | Set inner -> { ti with Kind = Set (resolveTypeInfo lookup inner) }
+        | Map (k, v) -> { ti with Kind = Map (resolveTypeInfo lookup k, resolveTypeInfo lookup v) }
+        | Tuple fields ->
+            { ti with Kind = Tuple (fields |> List.map (fun f -> { f with Type = resolveTypeInfo lookup f.Type })) }
+
+    let resolveSerdeTypeInfo (lookup: Map<string, TypeInfo>) (sti: SerdeTypeInfo) : SerdeTypeInfo =
+        match sti.Fields with
+        | Some fields ->
+            let resolvedFields = fields |> List.map (fun f -> { f with Type = resolveTypeInfo lookup f.Type })
+            { sti with Fields = Some resolvedFields }
+        | None -> sti
+
 type SerdeGeneratorTask() =
     inherit Task()
 
@@ -72,37 +102,51 @@ type SerdeGeneratorTask() =
             let emitter = this.ResolveEmitter()
             let mutable success = true
             let mutable hasEntryPoint = false
+            let parsedTypes = System.Collections.Generic.List<SerdeTypeInfo>()
             let allTypes = System.Collections.Generic.List<SerdeTypeInfo>()
             let generatedFiles = System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
 
+            // Phase 1: Parse all source files
             for item in this.SourceFiles do
                 let filePath = item.ItemSpec
 
                 if File.Exists(filePath) && filePath.EndsWith(".fs") then
                     try
                         let types = AstParser.parseFile filePath
-
-                        for typeInfo in types do
-                            let code = CodeEmitter.emit emitter typeInfo
-                            let outputFile = Path.Combine(this.OutputDir, sprintf "%s.serde.g.fs" typeInfo.Raw.TypeName)
-                            let existingContent =
-                                if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
-                                else None
-
-                            // Only write if content changed (deterministic output)
-                            match existingContent with
-                            | Some existing when existing = code -> ()
-                            | _ -> File.WriteAllText(outputFile, code)
-
-                            generatedFiles.Add(outputFile) |> ignore
-                            this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
-                            allTypes.Add(typeInfo)
+                        parsedTypes.AddRange(types)
 
                         // Check for entry point registration
                         if not hasEntryPoint then
                             hasEntryPoint <- AstParser.hasEntryPointRegistrationInFile filePath
                     with ex ->
                         this.Log.LogWarning("Serde: Failed to process {0}: {1}", filePath, ex.Message)
+
+            // Phase 2: Resolve field type references across all parsed types
+            let lookup =
+                parsedTypes
+                |> Seq.map (fun t -> t.Raw.TypeName, t.Raw)
+                |> Map.ofSeq
+            let resolvedTypes =
+                parsedTypes
+                |> Seq.map (FieldTypeResolver.resolveSerdeTypeInfo lookup)
+                |> Seq.toList
+
+            // Phase 3: Emit all types
+            for typeInfo in resolvedTypes do
+                let code = CodeEmitter.emit emitter typeInfo
+                let outputFile = Path.Combine(this.OutputDir, sprintf "%s.serde.g.fs" typeInfo.Raw.TypeName)
+                let existingContent =
+                    if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
+                    else None
+
+                // Only write if content changed (deterministic output)
+                match existingContent with
+                | Some existing when existing = code -> ()
+                | _ -> File.WriteAllText(outputFile, code)
+
+                generatedFiles.Add(outputFile) |> ignore
+                this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
+                allTypes.Add(typeInfo)
 
             // Discover and emit option types from record fields
             let optionTypeInfos = OptionDiscovery.discoverOptionTypes allTypes

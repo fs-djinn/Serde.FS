@@ -252,3 +252,54 @@ let ``EmitResolver with mixed record and option types`` () =
     Assert.That(code, Does.Contain("stringOptionJsonTypeInfo"))
     Assert.That(code, Does.Contain("open Serde.Generated.Person"))
     Assert.That(code, Does.Contain("open Serde.Generated.StringOption"))
+
+[<Test>]
+let ``Emits fully-qualified type for nested record field`` () =
+    let addressType : TypeInfo = {
+        Namespace = Some "My.App"; EnclosingModules = []; TypeName = "Address"
+        Kind = Record []; Attributes = []
+    }
+    let info = mkRecordInfo (Some "My.App") "User" Both [
+        mkField "Name" "string" String
+        mkFieldWithType "Address" addressType
+    ]
+
+    let code = emitter.Emit(info)
+    Assert.That(code, Does.Contain("args.[1] :?> My.App.Address"), "Constructor downcast should use FQ name")
+    Assert.That(code, Does.Contain("typeof<My.App.Address>"), "ParameterType should use FQ name")
+    Assert.That(code, Does.Contain("CreatePropertyInfo<My.App.Address>"), "PropertyInfo should use FQ name")
+    Assert.That(code, Does.Contain("JsonPropertyInfoValues<My.App.Address>"), "PropertyInfoValues should use FQ name")
+
+[<Test>]
+let ``Emits fully-qualified type for nested record from another module`` () =
+    let addressType : TypeInfo = {
+        Namespace = Some "Outer"; EnclosingModules = ["Inner"]; TypeName = "Address"
+        Kind = Record []; Attributes = []
+    }
+    let info = mkRecordInfo (Some "My.App") "User" Both [
+        mkFieldWithType "Address" addressType
+    ]
+
+    let code = emitter.Emit(info)
+    Assert.That(code, Does.Contain("args.[0] :?> Outer.Inner.Address"), "Constructor downcast should use FQ name with module")
+    Assert.That(code, Does.Contain("typeof<Outer.Inner.Address>"), "ParameterType should use FQ name with module")
+    Assert.That(code, Does.Contain("CreatePropertyInfo<Outer.Inner.Address>"), "PropertyInfo should use FQ name with module")
+
+[<Test>]
+let ``Emits option handling for nested record option field`` () =
+    let addressType : TypeInfo = {
+        Namespace = Some "My.App"; EnclosingModules = []; TypeName = "Address"
+        Kind = Record []; Attributes = []
+    }
+    let optionType = {
+        Namespace = None; EnclosingModules = []; TypeName = "option"
+        Kind = Option addressType; Attributes = []
+    }
+    let info = mkRecordInfo (Some "My.App") "User" Both [
+        mkFieldWithType "Address" optionType
+    ]
+
+    let code = emitter.Emit(info)
+    Assert.That(code, Does.Contain("match value.Address with"), "Should emit option match")
+    Assert.That(code, Does.Contain("| Some v ->"), "Should emit Some case")
+    Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, v, options)"), "Should serialize nested record via JsonSerializer")
