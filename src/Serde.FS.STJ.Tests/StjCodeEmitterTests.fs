@@ -501,3 +501,209 @@ type Color =
     Assert.That(code, Does.Contain("""if s = "Red" then TestApp.Color.Red"""))
     Assert.That(code, Does.Contain("""elif s = "Green" then TestApp.Color.Green"""))
     Assert.That(code, Does.Contain("""elif s = "Blue" then TestApp.Color.Blue"""))
+
+// --- Union tests ---
+
+/// Helper to build a SerdeUnionCaseInfo.
+let private mkUnionCase name (fields: SerdeFieldInfo list) : SerdeUnionCaseInfo =
+    { CaseName = name; RawCaseName = name; Fields = fields; Tag = None; Attributes = SerdeAttributes.empty }
+
+/// Helper to build a SerdeUnionCaseInfo with a rename.
+let private mkUnionCaseRenamed rawName effectiveName (fields: SerdeFieldInfo list) : SerdeUnionCaseInfo =
+    { CaseName = effectiveName; RawCaseName = rawName; Fields = fields; Tag = None
+      Attributes = { SerdeAttributes.empty with Rename = Some effectiveName } }
+
+/// Helper to build a skipped SerdeUnionCaseInfo.
+let private mkUnionCaseSkipped name (fields: SerdeFieldInfo list) : SerdeUnionCaseInfo =
+    { CaseName = name; RawCaseName = name; Fields = fields; Tag = None
+      Attributes = { SerdeAttributes.empty with Skip = true } }
+
+/// Helper to build an unnamed (tuple-like) field for a union case.
+let private mkUnnamedField (typeInfo: TypeInfo) : SerdeFieldInfo =
+    { Name = "Item"; RawName = "Item"; Type = typeInfo; Attributes = SerdeAttributes.empty; Capability = Both }
+
+/// Helper to build a SerdeTypeInfo for a union type.
+let private mkUnionInfo ns typeName (cases: SerdeUnionCaseInfo list) : SerdeTypeInfo =
+    let rawCases =
+        cases |> List.map (fun c ->
+            { CaseName = c.RawCaseName
+              Fields = c.Fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : TypeKindTypes.FieldInfo)
+              Tag = c.Tag
+              Attributes = [] } : TypeKindTypes.UnionCase)
+    {
+        Raw = {
+            Namespace = ns
+            EnclosingModules = []
+            TypeName = typeName
+            Kind = Union rawCases
+            Attributes = []
+        }
+        Capability = Both
+        Attributes = SerdeAttributes.empty
+        Fields = None
+        UnionCases = Some cases
+        EnumCases = None
+    }
+
+[<Test>]
+let ``Emits converter for union with nullary case`` () =
+    let info = mkUnionInfo (Some "TestNs") "MyUnion" [
+        mkUnionCase "Empty" []
+    ]
+
+    let code = emitter.Emit(info)
+    Assert.That(code, Does.Contain("module rec Serde.Generated.MyUnion"))
+    Assert.That(code, Does.Contain("MyUnionConverter"))
+    Assert.That(code, Does.Contain("JsonConverter<TestNs.MyUnion>"))
+    Assert.That(code, Does.Contain("CreateValueInfo"))
+    Assert.That(code, Does.Contain("""writer.WriteNull("Empty")"""))
+    Assert.That(code, Does.Contain("JsonTokenType.Null"))
+    Assert.That(code, Does.Contain("TestNs.MyUnion.Empty"))
+    Assert.That(code, Does.Contain("writer.WriteStartObject()"))
+    Assert.That(code, Does.Contain("writer.WriteEndObject()"))
+
+[<Test>]
+let ``Emits converter for union with single-field case`` () =
+    let info = mkUnionInfo (Some "TestNs") "MyUnion" [
+        mkUnionCase "Value" [ mkField "Value" "int" Int32 ]
+    ]
+
+    let code = emitter.Emit(info)
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Value")"""))
+    Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, v, options)"))
+    Assert.That(code, Does.Contain("JsonSerializer.Deserialize<int>(&reader, options)"))
+    Assert.That(code, Does.Contain("TestNs.MyUnion.Value(v)"))
+
+[<Test>]
+let ``Emits converter for union with tuple case`` () =
+    let info = mkUnionInfo (Some "TestNs") "MyUnion" [
+        mkUnionCase "Pair" [
+            mkUnnamedField (mkPrimType "float" Float64)
+            mkUnnamedField (mkPrimType "float" Float64)
+        ]
+    ]
+
+    let code = emitter.Emit(info)
+    Assert.That(code, Does.Contain("WriteStartArray"))
+    Assert.That(code, Does.Contain("WriteEndArray"))
+    Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, e0, options)"))
+    Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, e1, options)"))
+    Assert.That(code, Does.Contain("JsonSerializer.Deserialize<float>(&reader, options)"))
+    Assert.That(code, Does.Contain("TestNs.MyUnion.Pair(e0, e1)"))
+    Assert.That(code, Does.Contain("Expected StartArray for tuple union case"))
+
+[<Test>]
+let ``Emits converter for union with record-like case`` () =
+    let info = mkUnionInfo (Some "TestNs") "MyUnion" [
+        mkUnionCase "Person" [
+            mkField "Name" "string" String
+            mkField "Age" "int" Int32
+        ]
+    ]
+
+    let code = emitter.Emit(info)
+    // Write: nested object with field property names
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Person")"""))
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Name")"""))
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Age")"""))
+    // Read: mutable bindings and property matching
+    Assert.That(code, Does.Contain("let mutable f0 = Unchecked.defaultof<string>"))
+    Assert.That(code, Does.Contain("let mutable f1 = Unchecked.defaultof<int>"))
+    Assert.That(code, Does.Contain("""if propName = "Name" then"""))
+    Assert.That(code, Does.Contain("""elif propName = "Age" then"""))
+    Assert.That(code, Does.Contain("TestNs.MyUnion.Person(f0, f1)"))
+
+[<Test>]
+let ``Emits converter for union with renamed case`` () =
+    let info = mkUnionInfo (Some "TestNs") "MyUnion" [
+        mkUnionCaseRenamed "A" "Alpha" []
+    ]
+
+    let code = emitter.Emit(info)
+    // JSON uses effective name
+    Assert.That(code, Does.Contain("""writer.WriteNull("Alpha")"""))
+    Assert.That(code, Does.Contain("""if caseName = "Alpha" then"""))
+    // F# construction uses raw name
+    Assert.That(code, Does.Contain("TestNs.MyUnion.A"))
+
+[<Test>]
+let ``Emits converter for union with mixed case shapes`` () =
+    let info = mkUnionInfo (Some "TestNs") "Shape" [
+        mkUnionCase "Point" []
+        mkUnionCase "Circle" [ mkField "Radius" "float" Float64 ]
+        mkUnionCase "Line" [
+            mkUnnamedField (mkPrimType "float" Float64)
+            mkUnnamedField (mkPrimType "float" Float64)
+        ]
+        mkUnionCase "Rect" [
+            mkField "Width" "float" Float64
+            mkField "Height" "float" Float64
+        ]
+    ]
+
+    let code = emitter.Emit(info)
+    // All 4 shapes represented
+    Assert.That(code, Does.Contain("""writer.WriteNull("Point")"""))
+    Assert.That(code, Does.Contain("TestNs.Shape.Circle(v)"))
+    Assert.That(code, Does.Contain("TestNs.Shape.Line(e0, e1)"))
+    Assert.That(code, Does.Contain("TestNs.Shape.Rect(e0, e1)"))
+    // Read: if/elif chain
+    Assert.That(code, Does.Contain("""if caseName = "Point" then"""))
+    Assert.That(code, Does.Contain("""elif caseName = "Circle" then"""))
+    Assert.That(code, Does.Contain("""elif caseName = "Line" then"""))
+    Assert.That(code, Does.Contain("""elif caseName = "Rect" then"""))
+
+[<Test>]
+let ``Emits converter for union with skipped case`` () =
+    let info = mkUnionInfo (Some "TestNs") "MyUnion" [
+        mkUnionCase "A" []
+        mkUnionCaseSkipped "B" [ mkField "X" "int" Int32 ]
+    ]
+
+    let code = emitter.Emit(info)
+    // Skipped case excluded from if/elif chain
+    Assert.That(code, Does.Not.Contain("""caseName = "B" then"""))
+    // Wildcard covers skipped cases
+    Assert.That(code, Does.Contain("| _ -> raise"))
+    // Active case present
+    Assert.That(code, Does.Contain("""caseName = "A" then"""))
+
+[<Test>]
+let ``EmitResolver includes union type`` () =
+    let unionInfo = mkUnionInfo (Some "TestNs") "Shape" [
+        mkUnionCase "Circle" [ mkField "Radius" "float" Float64 ]
+        mkUnionCase "Point" []
+    ]
+    let recordInfo = mkRecordInfo (Some "TestNs") "Person" Both [
+        mkField "Name" "string" String
+    ]
+    let types = [ recordInfo; unionInfo ]
+
+    let result = resolverEmitter.EmitResolver(types)
+    Assert.That(result.IsSome, Is.True)
+    let code = result.Value
+    Assert.That(code, Does.Contain("typeof<TestNs.Shape>"))
+    Assert.That(code, Does.Contain("shapeJsonTypeInfo"))
+    Assert.That(code, Does.Contain("open Serde.Generated.Shape"))
+
+[<Test>]
+let ``Full pipeline: parse then emit union`` () =
+    let source = """
+namespace TestApp
+
+[<Serde>]
+type Shape =
+    | Circle of radius: float
+    | Point
+"""
+    let types = Serde.FS.SourceGen.AstParser.parseSource "/test.fs" source
+    Assert.That(types.Length, Is.EqualTo(1))
+
+    let code = emitter.Emit(types.[0])
+    Assert.That(code, Does.Contain("module rec Serde.Generated.Shape"))
+    Assert.That(code, Does.Contain("ShapeConverter"))
+    Assert.That(code, Does.Contain("JsonConverter<TestApp.Shape>"))
+    Assert.That(code, Does.Contain("""caseName = "Circle" then"""))
+    Assert.That(code, Does.Contain("""caseName = "Point" then"""))
+    Assert.That(code, Does.Contain("TestApp.Shape.Circle(v)"))
+    Assert.That(code, Does.Contain("TestApp.Shape.Point"))

@@ -236,7 +236,7 @@ type SerdeGeneratorTask() =
             | :? ISerdeResolverEmitter as resolverEmitter ->
                 match resolverEmitter.EmitResolver(Seq.toList allTypes) with
                 | Some code ->
-                    let outputFile = Path.Combine(this.OutputDir, "SerdeResolver.serde.g.fs")
+                    let outputFile = Path.Combine(this.OutputDir, "~SerdeResolver.serde.g.fs")
                     let existingContent =
                         if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
                         else None
@@ -259,7 +259,7 @@ type SerdeGeneratorTask() =
                     "    for t in System.Reflection.Assembly.GetExecutingAssembly().GetTypes() do\n" +
                     "        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle)\n" +
                     "    SerdeApp.invokeRegisteredEntryPoint argv\n"
-                let outputFile = Path.Combine(this.OutputDir, "~EntryPoint.serde.g.fs")
+                let outputFile = Path.Combine(this.OutputDir, "~~EntryPoint.serde.g.fs")
                 let existingContent =
                     if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
                     else None
