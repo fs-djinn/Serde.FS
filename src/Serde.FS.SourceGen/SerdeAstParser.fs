@@ -28,10 +28,13 @@ module SerdeAstParser =
     let parseFileAllTypes (filePath: string) : TypeInfo list =
         AstParser.parseFileAllTypes filePath
 
+    let private serdeEntryPointNames =
+        [ "SerdeApp.entryPoint"; "Serde.FS.SerdeApp.entryPoint" ]
+
     /// Check if source text contains a call to SerdeApp.entryPoint.
     let hasEntryPointRegistration (filePath: string) (sourceText: string) : bool =
-        AstParser.hasEntryPointRegistration filePath sourceText
+        AstParser.sourceContainsCallTo serdeEntryPointNames filePath sourceText
 
     /// Check if a source file contains a call to SerdeApp.entryPoint.
     let hasEntryPointRegistrationInFile (filePath: string) : bool =
-        AstParser.hasEntryPointRegistrationInFile filePath
+        AstParser.fileContainsCallTo serdeEntryPointNames filePath
