@@ -1,7 +1,7 @@
 module FSharp.SourceDjinn.Tests.TypeKindExtractorTests
 
 open NUnit.Framework
-open FSharp.SourceDjinn.TypeModel
+open FSharp.SourceDjinn.Types
 open FSharp.SourceDjinn
 
 [<Test>]

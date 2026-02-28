@@ -2,7 +2,8 @@ module FSharp.SourceDjinn.Tests.AstParserTests
 
 open NUnit.Framework
 open Serde.FS
-open FSharp.SourceDjinn.TypeModel
+open FSharp.SourceDjinn
+open FSharp.SourceDjinn.Types
 open Serde.FS.SourceGen
 
 [<Test>]
@@ -176,58 +177,52 @@ module Domain =
     Assert.That(t.Raw.TypeName, Is.EqualTo("Person"))
 
 [<Test>]
-let ``Detects SerdeApp.entryPoint call`` () =
+let ``Detects EntryPoint attribute on top-level function`` () =
     let source = """
 module Program
 
-open Serde.FS
-
-[<Serde>]
-type Person = { Name: string; Age: int }
-
-let run argv =
-    0
-
-SerdeApp.entryPoint run
+[<FSharp.SourceDjinn.EntryPoint>]
+let run argv = 0
 """
-    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
-    Assert.That(result, Is.True)
+    let result = EntryPointDetector.detect "/test.fs" source
+    Assert.That(result.IsSome, Is.True)
+    Assert.That(result.Value.ModuleName, Is.EqualTo("Program"))
+    Assert.That(result.Value.FunctionName, Is.EqualTo("run"))
 
 [<Test>]
-let ``No entry point registration returns false`` () =
+let ``No entry point attribute returns None`` () =
     let source = """
 namespace MyApp
 
-open Serde.FS
-
-[<Serde>]
 type Person = { Name: string; Age: int }
 """
-    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
-    Assert.That(result, Is.False)
+    let result = EntryPointDetector.detect "/test.fs" source
+    Assert.That(result.IsNone, Is.True)
 
 [<Test>]
-let ``Detects fully qualified Serde.FS.SerdeApp.entryPoint`` () =
-    let source = """
-module Program
-
-let run argv = 0
-
-Serde.FS.SerdeApp.entryPoint run
-"""
-    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
-    Assert.That(result, Is.True)
-
-[<Test>]
-let ``Detects entry point in named module`` () =
+let ``Extracts correct module name and function name`` () =
     let source = """
 module MyApp.Program
 
-open Serde.FS
-
-let run argv = 0
-
-SerdeApp.entryPoint run
+[<FSharp.SourceDjinn.EntryPoint>]
+let main argv = 0
 """
-    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
-    Assert.That(result, Is.True)
+    let result = EntryPointDetector.detect "/test.fs" source
+    Assert.That(result.IsSome, Is.True)
+    Assert.That(result.Value.ModuleName, Is.EqualTo("MyApp.Program"))
+    Assert.That(result.Value.FunctionName, Is.EqualTo("main"))
+
+[<Test>]
+let ``Works with short EntryPoint attribute name`` () =
+    let source = """
+module Program
+
+open FSharp.SourceDjinn.TypeModel
+
+[<EntryPoint>]
+let run argv = 0
+"""
+    let result = EntryPointDetector.detect "/test.fs" source
+    Assert.That(result.IsSome, Is.True)
+    Assert.That(result.Value.ModuleName, Is.EqualTo("Program"))
+    Assert.That(result.Value.FunctionName, Is.EqualTo("run"))

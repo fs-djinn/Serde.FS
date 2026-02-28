@@ -2,6 +2,7 @@ module Program
 
 open Serde.FS
 open Serde.FS.SystemTextJson
+open FSharp.SourceDjinn.TypeModel
 
 [<Serde>]
 type Color =
@@ -38,6 +39,7 @@ type Person = {
     Shapes: Shape list
 }
 
+[<EntryPoint>]
 let run argv =
     SerdeStj.useAsDefault()
     let pets = [
@@ -67,5 +69,3 @@ let run argv =
         let back: Shape = Serde.Deserialize shapeJson
         printfn "Back: %A" back
     0
-
-SerdeApp.entryPoint run

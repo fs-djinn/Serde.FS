@@ -2,7 +2,8 @@ namespace Serde.FS.SourceGen
 
 open System.IO
 open Serde.FS
-open FSharp.SourceDjinn.TypeModel
+open FSharp.SourceDjinn
+open FSharp.SourceDjinn.Types
 open Microsoft.Build.Utilities
 open Microsoft.Build.Framework
 
@@ -155,7 +156,6 @@ type SerdeGeneratorTask() =
 
             let emitter = this.ResolveEmitter()
             let mutable success = true
-            let mutable hasEntryPoint = false
             let parsedTypes = System.Collections.Generic.List<SerdeTypeInfo>()
             let allTypeInfos = System.Collections.Generic.List<TypeInfo>()
             let allTypes = System.Collections.Generic.List<SerdeTypeInfo>()
@@ -174,9 +174,6 @@ type SerdeGeneratorTask() =
                         let allTypesInFile = SerdeAstParser.parseFileAllTypes filePath
                         allTypeInfos.AddRange(allTypesInFile)
 
-                        // Check for entry point registration
-                        if not hasEntryPoint then
-                            hasEntryPoint <- SerdeAstParser.hasEntryPointRegistrationInFile filePath
                     with ex ->
                         this.Log.LogWarning("Serde: Failed to process {0}: {1}", filePath, ex.Message)
 
@@ -260,29 +257,44 @@ type SerdeGeneratorTask() =
                 | None -> ()
             | _ -> ()
 
-            // Emit entry point shim if any source file registers an entry point
-            if hasEntryPoint then
-                let entryPointCode =
-                    "module Serde.Generated.EntryPoint\n\n" +
-                    "open Serde.FS\n\n" +
-                    "[<EntryPoint>]\n" +
-                    "let main argv =\n" +
-                    "    // Force all F# module initializers so that entryPoint calls execute\n" +
-                    "    for t in System.Reflection.Assembly.GetExecutingAssembly().GetTypes() do\n" +
-                    "        System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle)\n" +
-                    "    SerdeApp.invokeRegisteredEntryPoint argv\n"
-                let outputFile = Path.Combine(this.OutputDir, "~~EntryPoint.serde.g.fs")
-                let existingContent =
-                    if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
-                    else None
-                match existingContent with
-                | Some existing when existing = entryPointCode -> ()
-                | _ -> File.WriteAllText(outputFile, entryPointCode)
-                generatedFiles.Add(outputFile) |> ignore
-                this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
+            // Emit entry point wrapper if any source file has [<EntryPoint>]
+            for item in this.SourceFiles do
+                let filePath = item.ItemSpec
+                if File.Exists(filePath) && filePath.EndsWith(".fs") then
+                    let sourceText = File.ReadAllText(filePath)
+                    match EntryPointDetector.detect filePath sourceText with
+                    | Some info ->
+                        // Generate a Serde-specific entry point that forces module
+                        // initializers before calling the user's function.  This ensures
+                        // the generated resolver's module-level `do` binding runs and
+                        // registers itself with the STJ options cache.
+                        let code =
+                            sprintf
+                                "namespace FSharp.SourceDjinn.Generated\n\n\
+                                 module DjinnEntryPoint =\n\n\
+                                 \    [<EntryPoint>]\n\
+                                 \    let main argv =\n\
+                                 \        for t in System.Reflection.Assembly.GetExecutingAssembly().GetTypes() do\n\
+                                 \            System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(t.TypeHandle)\n\
+                                 \        %s.%s argv\n"
+                                info.ModuleName info.FunctionName
+                        let outputFile = Path.Combine(this.OutputDir, "~~EntryPoint.djinn.g.fs")
+                        let existingContent =
+                            if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
+                            else None
+                        match existingContent with
+                        | Some existing when existing = code -> ()
+                        | _ -> File.WriteAllText(outputFile, code)
+                        generatedFiles.Add(outputFile) |> ignore
+                        this.Log.LogMessage(MessageImportance.Low, "Serde: Generated {0}", outputFile)
+                    | None -> ()
 
             // Remove stale generated files for types that no longer exist
             for existingFile in Directory.GetFiles(this.OutputDir, "*.serde.g.fs") do
+                if not (generatedFiles.Contains(existingFile)) then
+                    File.Delete(existingFile)
+                    this.Log.LogMessage(MessageImportance.Low, "Serde: Removed stale {0}", existingFile)
+            for existingFile in Directory.GetFiles(this.OutputDir, "*.djinn.g.fs") do
                 if not (generatedFiles.Contains(existingFile)) then
                     File.Delete(existingFile)
                     this.Log.LogMessage(MessageImportance.Low, "Serde: Removed stale {0}", existingFile)

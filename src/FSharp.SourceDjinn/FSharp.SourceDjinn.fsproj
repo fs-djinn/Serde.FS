@@ -8,6 +8,8 @@
   <ItemGroup>
     <Compile Include="TypeKindExtractor.fs" />
     <Compile Include="AstParser.fs" />
+    <Compile Include="EntryPointDetector.fs" />
+    <Compile Include="EntryPointEmitter.fs" />
   </ItemGroup>
 
   <ItemGroup>

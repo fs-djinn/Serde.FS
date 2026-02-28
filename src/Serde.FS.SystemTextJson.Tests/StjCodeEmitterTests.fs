@@ -3,7 +3,7 @@ module Serde.FS.SystemTextJson.Tests.StjCodeEmitterTests
 open NUnit.Framework
 open Serde.FS
 open FSharp.SourceDjinn
-open FSharp.SourceDjinn.TypeModel
+open FSharp.SourceDjinn.Types
 open Serde.FS.SystemTextJson
 
 let private emitter = StjCodeEmitter() :> ISerdeCodeEmitter
@@ -40,7 +40,7 @@ let private mkOptionInfo (inner: TypeInfo) : SerdeTypeInfo =
 /// Helper to build a SerdeTypeInfo for a simple record.
 let private mkRecordInfo ns typeName cap (fields: SerdeFieldInfo list) : SerdeTypeInfo =
     let rawFields =
-        fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : TypeModel.FieldInfo)
+        fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : Types.FieldInfo)
     {
         Raw = {
             Namespace = ns
@@ -309,7 +309,7 @@ let ``Emits option handling for nested record option field`` () =
 
 /// Helper to build a tuple TypeInfo from a list of element TypeInfos.
 let private mkTupleType (elements: TypeInfo list) : TypeInfo =
-    let fields = elements |> List.mapi (fun i ti -> { Name = sprintf "Item%d" (i+1); Type = ti; Attributes = [] } : TypeModel.FieldInfo)
+    let fields = elements |> List.mapi (fun i ti -> { Name = sprintf "Item%d" (i+1); Type = ti; Attributes = [] } : Types.FieldInfo)
     { Namespace = None; EnclosingModules = []; TypeName = "tuple"; Kind = Tuple fields; Attributes = [] }
 
 /// Helper to build a SerdeTypeInfo for a tuple type.
@@ -385,20 +385,20 @@ let ``EmitResolver with mixed record option and tuple types`` () =
 [<Test>]
 let ``typeInfoToPascalName produces IntStringTuple`` () =
     let ti = mkTupleType [ mkPrimType "int" Int32; mkPrimType "string" String ]
-    let name = TypeModel.typeInfoToPascalName ti
+    let name = Types.typeInfoToPascalName ti
     Assert.That(name, Is.EqualTo("IntStringTuple"))
 
 [<Test>]
 let ``typeInfoToFqFSharpType produces parenthesized tuple`` () =
     let ti = mkTupleType [ mkPrimType "int" Int32; mkPrimType "string" String ]
-    let fq = TypeModel.typeInfoToFqFSharpType ti
+    let fq = Types.typeInfoToFqFSharpType ti
     Assert.That(fq, Is.EqualTo("(int * string)"))
 
 [<Test>]
 let ``typeInfoToFqFSharpType produces parenthesized tuple nested in option`` () =
     let ti = mkTupleType [ mkPrimType "int" Int32; mkPrimType "string" String ]
     let optTi = mkOptionType ti
-    let fq = TypeModel.typeInfoToFqFSharpType optTi
+    let fq = Types.typeInfoToFqFSharpType optTi
     Assert.That(fq, Is.EqualTo("(int * string) option"))
 
 // --- Enum tests ---
@@ -407,7 +407,7 @@ let ``typeInfoToFqFSharpType produces parenthesized tuple nested in option`` () 
 let private mkEnumInfo ns typeName (cases: SerdeEnumCaseInfo list) : SerdeTypeInfo =
     let rawCases =
         cases |> List.map (fun c ->
-            { CaseName = c.RawCaseName; Value = c.Value; Attributes = [] } : TypeModel.EnumCase)
+            { CaseName = c.RawCaseName; Value = c.Value; Attributes = [] } : Types.EnumCase)
     {
         Raw = {
             Namespace = ns
@@ -528,9 +528,9 @@ let private mkUnionInfo ns typeName (cases: SerdeUnionCaseInfo list) : SerdeType
     let rawCases =
         cases |> List.map (fun c ->
             { CaseName = c.RawCaseName
-              Fields = c.Fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : TypeModel.FieldInfo)
+              Fields = c.Fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : Types.FieldInfo)
               Tag = c.Tag
-              Attributes = [] } : TypeModel.UnionCase)
+              Attributes = [] } : Types.UnionCase)
     {
         Raw = {
             Namespace = ns

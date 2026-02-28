@@ -1,6 +1,6 @@
 namespace FSharp.SourceDjinn
 
-module TypeModel =
+module Types =
 
     type PrimitiveKind =
         | Unit

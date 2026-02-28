@@ -2,7 +2,7 @@ module FSharp.SourceDjinn.Tests.CodeEmitterTests
 
 open NUnit.Framework
 open Serde.FS
-open FSharp.SourceDjinn.TypeModel
+open FSharp.SourceDjinn.Types
 open Serde.FS.SourceGen
 
 type FakeEmitter() =
