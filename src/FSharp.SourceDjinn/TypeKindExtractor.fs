@@ -1,6 +1,6 @@
 namespace FSharp.SourceDjinn
 
-open Serde.FS.TypeKindTypes
+open FSharp.SourceDjinn.TypeModel
 open FSharp.Compiler.CodeAnalysis
 open FSharp.Compiler.Syntax
 open FSharp.Compiler.Text

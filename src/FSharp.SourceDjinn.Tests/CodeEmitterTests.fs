@@ -2,8 +2,8 @@ module FSharp.SourceDjinn.Tests.CodeEmitterTests
 
 open NUnit.Framework
 open Serde.FS
-open Serde.FS.TypeKindTypes
-open FSharp.SourceDjinn
+open FSharp.SourceDjinn.TypeModel
+open Serde.FS.SourceGen
 
 type FakeEmitter() =
     interface ISerdeCodeEmitter with
@@ -31,7 +31,7 @@ let ``CodeEmitter delegates to ISerdeCodeEmitter`` () =
         EnumCases = None
     }
 
-    let code = CodeEmitter.emit emitter info
+    let code = SerdeCodeEmitter.emit emitter info
     Assert.That(code, Is.EqualTo("FAKE: Person"))
 
 [<Test>]

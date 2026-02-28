@@ -2,8 +2,8 @@ module FSharp.SourceDjinn.Tests.AstParserTests
 
 open NUnit.Framework
 open Serde.FS
-open Serde.FS.TypeKindTypes
-open FSharp.SourceDjinn
+open FSharp.SourceDjinn.TypeModel
+open Serde.FS.SourceGen
 
 [<Test>]
 let ``Parses record with Serde attribute`` () =
@@ -15,7 +15,7 @@ open Serde.FS
 [<Serde>]
 type Person = { FName: string; LName: string; Age: int }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
@@ -44,7 +44,7 @@ namespace MyApp
 [<Serde.FS.SerdeSerialize>]
 type Point = { X: float; Y: float }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
@@ -59,7 +59,7 @@ namespace MyApp
 [<SerdeDeserialize>]
 type Config = { Host: string; Port: int }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
@@ -73,7 +73,7 @@ namespace MyApp
 
 type NotSerde = { X: int }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(0))
 
 [<Test>]
@@ -89,7 +89,7 @@ type Person = { Name: string; Age: int }
 [<Serde>]
 type Address = { Street: string; City: string; Zip: string }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(2))
     Assert.That(types.[0].Raw.TypeName, Is.EqualTo("Person"))
     Assert.That(types.[1].Raw.TypeName, Is.EqualTo("Address"))
@@ -102,7 +102,7 @@ namespace MyApp
 [<Serde>]
 type Person = { Name: string; MiddleName: string option }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
@@ -127,7 +127,7 @@ type AllTypes = {
     G: System.Guid
 }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
@@ -150,7 +150,7 @@ module Program
 [<Serde>]
 type Person = { Name: string; Age: int }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
@@ -167,7 +167,7 @@ module Domain =
     [<Serde>]
     type Person = { Name: string; Age: int }
 """
-    let types = AstParser.parseSource "/test.fs" source
+    let types = SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let t = types.[0]
@@ -190,7 +190,7 @@ let run argv =
 
 SerdeApp.entryPoint run
 """
-    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
     Assert.That(result, Is.True)
 
 [<Test>]
@@ -203,7 +203,7 @@ open Serde.FS
 [<Serde>]
 type Person = { Name: string; Age: int }
 """
-    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
     Assert.That(result, Is.False)
 
 [<Test>]
@@ -215,7 +215,7 @@ let run argv = 0
 
 Serde.FS.SerdeApp.entryPoint run
 """
-    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
     Assert.That(result, Is.True)
 
 [<Test>]
@@ -229,5 +229,5 @@ let run argv = 0
 
 SerdeApp.entryPoint run
 """
-    let result = AstParser.hasEntryPointRegistration "/test.fs" source
+    let result = SerdeAstParser.hasEntryPointRegistration "/test.fs" source
     Assert.That(result, Is.True)

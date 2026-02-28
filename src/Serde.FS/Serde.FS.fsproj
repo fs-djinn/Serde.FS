@@ -6,7 +6,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="TypeKind.fs" />
     <Compile Include="SerdeMetadata.fs" />
     <Compile Include="ISerdeCodeEmitter.fs" />
     <Compile Include="DebugEmitter.fs" />
@@ -15,6 +14,10 @@
     <Compile Include="ISerdeBackend.fs" />
     <Compile Include="Serde.fs" />
     <Compile Include="SerdeApp.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FSharp.SourceDjinn.TypeModel\FSharp.SourceDjinn.TypeModel.fsproj" />
   </ItemGroup>
 
 </Project>

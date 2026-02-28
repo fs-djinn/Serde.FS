@@ -1,7 +1,7 @@
-namespace FSharp.SourceDjinn
+namespace Serde.FS.SourceGen
 
 open Serde.FS
 
-module CodeEmitter =
+module SerdeCodeEmitter =
     let emit (emitter: ISerdeCodeEmitter) (info: SerdeTypeInfo) : string =
         emitter.Emit(info)

@@ -1,6 +1,6 @@
-namespace Serde.FS
+namespace FSharp.SourceDjinn
 
-module TypeKindTypes =
+module TypeModel =
 
     type PrimitiveKind =
         | Unit
@@ -85,7 +85,7 @@ module TypeKindTypes =
         | i -> ti.TypeName.Substring(i + 1)
 
     /// Converts a TypeInfo to a PascalCase identifier for module/file naming.
-    /// e.g. int option → "IntOption", int option option → "IntOptionOption", MyApp.Person option → "PersonOption"
+    /// e.g. int option -> "IntOption", int option option -> "IntOptionOption", MyApp.Person option -> "PersonOption"
     let rec typeInfoToPascalName (ti: TypeInfo) : string =
         match ti.Kind with
         | Primitive _ -> upperFirst ti.TypeName

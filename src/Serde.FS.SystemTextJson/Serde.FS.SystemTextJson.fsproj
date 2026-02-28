@@ -8,21 +8,26 @@
 	<PropertyGroup>
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageId>Serde.FS.SystemTextJson</PackageId>
-		<Version>0.1.1-debug.33</Version>
+		<Version>0.1.1-debug.34</Version>
 		<Authors>Jordan Marr</Authors>
 		<Description>System.Text.Json backend for Serde.FS</Description>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<None Include="build\Serde.FS.SystemTextJson.targets" Pack="true" PackagePath="build\" />
+		<None Include="analyzers\dotnet\fs\FSharp.SourceDjinn.TypeModel.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\FSharp.SourceDjinn.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\FSharp.Core.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\FSharp.Compiler.Service.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\Serde.FS.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
+		<None Include="analyzers\dotnet\fs\Serde.FS.SourceGen.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 		<None Include="analyzers\dotnet\fs\Serde.FS.SystemTextJson.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 	</ItemGroup>
 
 	<Target Name="CopyAnalyzerDependencies" AfterTargets="Build">
+		<Copy SourceFiles="$(ProjectDir)..\FSharp.SourceDjinn.TypeModel\bin\$(Configuration)\net8.0\FSharp.SourceDjinn.TypeModel.dll"
+			  DestinationFolder="$(ProjectDir)analyzers/dotnet/fs/" SkipUnchangedFiles="true" />
+
 		<Copy SourceFiles="$(ProjectDir)..\FSharp.SourceDjinn\bin\$(Configuration)\net8.0\FSharp.SourceDjinn.dll"
 			  DestinationFolder="$(ProjectDir)analyzers/dotnet/fs/" SkipUnchangedFiles="true" />
 
@@ -34,6 +39,10 @@
 
 		<!-- Copy Serde.FS.dll to analyzers (needed at build time for metadata types) -->
 		<Copy SourceFiles="$(ProjectDir)..\Serde.FS\bin\$(Configuration)\net8.0\Serde.FS.dll"
+			  DestinationFolder="$(ProjectDir)analyzers/dotnet/fs/" SkipUnchangedFiles="true" />
+
+		<!-- Copy Serde.FS.SourceGen.dll to analyzers (needed for MSBuild task at build time) -->
+		<Copy SourceFiles="$(ProjectDir)..\Serde.FS.SourceGen\bin\$(Configuration)\net8.0\Serde.FS.SourceGen.dll"
 			  DestinationFolder="$(ProjectDir)analyzers/dotnet/fs/" SkipUnchangedFiles="true" />
 
 		<!-- Copy Serde.FS.SystemTextJson.dll to analyzers (needed for StjCodeEmitter at build time) -->
@@ -58,6 +67,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\FSharp.SourceDjinn.TypeModel\FSharp.SourceDjinn.TypeModel.fsproj" />
     <ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
   </ItemGroup>
 

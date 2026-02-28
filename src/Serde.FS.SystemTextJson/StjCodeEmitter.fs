@@ -2,6 +2,7 @@ namespace Serde.FS.SystemTextJson
 
 open System.Text
 open Serde.FS
+open FSharp.SourceDjinn
 
 module internal StjCodeEmitterImpl =
 
@@ -92,7 +93,7 @@ module internal StjCodeEmitterImpl =
         let fieldAssignments =
             fields
             |> List.mapi (fun i field ->
-                let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+                let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
                 sprintf "%s = args.[%d] :?> %s" field.RawName i fsharpType)
             |> String.concat "; "
         appendf "                        { %s } : %s)," fieldAssignments fqn
@@ -101,7 +102,7 @@ module internal StjCodeEmitterImpl =
         appendf "                    ConstructorParameterMetadataInitializer = (fun _ ->"
         appendf "                        [|"
         for i, field in fields |> List.mapi (fun i x -> i, x) do
-            let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+            let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
             appendf "                            JsonParameterInfoValues(Name = \"%s\", ParameterType = typeof<%s>, Position = %d)"
                 (lowerFirst field.Name) fsharpType i
         appendf "                        |]"
@@ -111,7 +112,7 @@ module internal StjCodeEmitterImpl =
         appendf "                        [|"
 
         for field in fields do
-            let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+            let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
             appendf "                            JsonMetadataServices.CreatePropertyInfo<%s>(" fsharpType
             appendf "                                options,"
             appendf "                                JsonPropertyInfoValues<%s>(" fsharpType
@@ -129,7 +130,7 @@ module internal StjCodeEmitterImpl =
         appendf "                    writer.WriteStartObject()"
 
         for field in fields do
-            let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+            let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
             let call = writerCall field.Name field.RawName fsharpType
             append call
 
@@ -146,12 +147,12 @@ module internal StjCodeEmitterImpl =
     let emitOption (info: SerdeTypeInfo) : string =
         let inner =
             match info.Raw.Kind with
-            | TypeKindTypes.Option inner -> inner
+            | TypeModel.Option inner -> inner
             | _ -> failwith "emitOption called with non-Option kind"
 
-        let pascalName = TypeKindTypes.typeInfoToPascalName info.Raw
-        let fqType = TypeKindTypes.typeInfoToFqFSharpType info.Raw
-        let innerFqType = TypeKindTypes.typeInfoToFqFSharpType inner
+        let pascalName = TypeModel.typeInfoToPascalName info.Raw
+        let fqType = TypeModel.typeInfoToFqFSharpType info.Raw
+        let innerFqType = TypeModel.typeInfoToFqFSharpType inner
         let converterName = pascalName + "Converter"
         let fnName = lowerFirst pascalName + "JsonTypeInfo"
 
@@ -187,11 +188,11 @@ module internal StjCodeEmitterImpl =
     let emitTuple (info: SerdeTypeInfo) : string =
         let elements =
             match info.Raw.Kind with
-            | TypeKindTypes.Tuple elems -> elems
+            | TypeModel.Tuple elems -> elems
             | _ -> failwith "emitTuple called with non-Tuple kind"
 
-        let pascalName = TypeKindTypes.typeInfoToPascalName info.Raw
-        let fqType = TypeKindTypes.typeInfoToFqFSharpType info.Raw
+        let pascalName = TypeModel.typeInfoToPascalName info.Raw
+        let fqType = TypeModel.typeInfoToFqFSharpType info.Raw
         let converterName = pascalName + "Converter"
         let fnName = lowerFirst pascalName + "JsonTypeInfo"
 
@@ -215,7 +216,7 @@ module internal StjCodeEmitterImpl =
         appendf "            if reader.TokenType <> JsonTokenType.StartArray then"
         appendf "                raise (JsonException(\"Expected StartArray for tuple\"))"
         for i, elem in elements |> List.mapi (fun i x -> i, x) do
-            let elemFqType = TypeKindTypes.typeInfoToFqFSharpType elem.Type
+            let elemFqType = TypeModel.typeInfoToFqFSharpType elem.Type
             appendf "            reader.Read() |> ignore"
             appendf "            let e%d = JsonSerializer.Deserialize<%s>(&reader, options)" i elemFqType
         appendf "            reader.Read() |> ignore"
@@ -226,7 +227,7 @@ module internal StjCodeEmitterImpl =
         let destructure = elements |> List.mapi (fun i _ -> sprintf "e%d" i) |> String.concat ", "
         appendf "            let (%s) = value" destructure
         for i, elem in elements |> List.mapi (fun i x -> i, x) do
-            let elemFqType = TypeKindTypes.typeInfoToFqFSharpType elem.Type
+            let elemFqType = TypeModel.typeInfoToFqFSharpType elem.Type
             appendf "            JsonSerializer.Serialize(writer, e%d, options)" i
         appendf "            writer.WriteEndArray()"
         append ""
@@ -292,7 +293,7 @@ module internal StjCodeEmitterImpl =
                 appendf "                %s.%s" fqn case.RawCaseName
             | SingleField ->
                 let field = case.Fields.[0]
-                let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+                let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
                 appendf "                let v = JsonSerializer.Deserialize<%s>(&reader, options)" fsharpType
                 appendf "                reader.Read() |> ignore"
                 appendf "                %s.%s(v)" fqn case.RawCaseName
@@ -300,7 +301,7 @@ module internal StjCodeEmitterImpl =
                 appendf "                if reader.TokenType <> JsonTokenType.StartArray then"
                 appendf "                    raise (JsonException(\"Expected StartArray for tuple union case\"))"
                 for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
-                    let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+                    let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
                     appendf "                reader.Read() |> ignore"
                     appendf "                let e%d = JsonSerializer.Deserialize<%s>(&reader, options)" j fsharpType
                 appendf "                reader.Read() |> ignore"
@@ -312,14 +313,14 @@ module internal StjCodeEmitterImpl =
                 appendf "                    raise (JsonException(\"Expected StartObject for record union case\"))"
                 appendf "                reader.Read() |> ignore"
                 for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
-                    let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+                    let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
                     appendf "                let mutable f%d = Unchecked.defaultof<%s>" j fsharpType
                 appendf "                while reader.TokenType <> JsonTokenType.EndObject do"
                 appendf "                    let propName = reader.GetString()"
                 appendf "                    reader.Read() |> ignore"
                 for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
                     let kw = if j = 0 then "if" else "elif"
-                    let fsharpType = TypeKindTypes.typeInfoToFqFSharpType field.Type
+                    let fsharpType = TypeModel.typeInfoToFqFSharpType field.Type
                     appendf "                    %s propName = \"%s\" then" kw field.Name
                     appendf "                        f%d <- JsonSerializer.Deserialize<%s>(&reader, options)" j fsharpType
                 appendf "                    else reader.Skip()"
@@ -423,25 +424,25 @@ module internal StjCodeEmitterImpl =
 
     let emit (info: SerdeTypeInfo) : string =
         match info.Raw.Kind with
-        | TypeKindTypes.Option _ -> emitOption info
-        | TypeKindTypes.Tuple _ -> emitTuple info
-        | TypeKindTypes.Enum _ -> emitEnum info
-        | TypeKindTypes.Union _ -> emitUnion info
+        | TypeModel.Option _ -> emitOption info
+        | TypeModel.Tuple _ -> emitTuple info
+        | TypeModel.Enum _ -> emitEnum info
+        | TypeModel.Union _ -> emitUnion info
         | _ -> emitRecord info
 
     let private resolverModuleName (info: SerdeTypeInfo) : string =
         match info.Raw.Kind with
-        | TypeKindTypes.Option _ | TypeKindTypes.Tuple _ -> TypeKindTypes.typeInfoToPascalName info.Raw
+        | TypeModel.Option _ | TypeModel.Tuple _ -> TypeModel.typeInfoToPascalName info.Raw
         | _ -> info.Raw.TypeName
 
     let private resolverFqn (info: SerdeTypeInfo) : string =
         match info.Raw.Kind with
-        | TypeKindTypes.Option _ | TypeKindTypes.Tuple _ -> TypeKindTypes.typeInfoToFqFSharpType info.Raw
+        | TypeModel.Option _ | TypeModel.Tuple _ -> TypeModel.typeInfoToFqFSharpType info.Raw
         | _ -> fullyQualifiedName info
 
     let private resolverFnName (info: SerdeTypeInfo) : string =
         match info.Raw.Kind with
-        | TypeKindTypes.Option _ | TypeKindTypes.Tuple _ -> lowerFirst (TypeKindTypes.typeInfoToPascalName info.Raw) + "JsonTypeInfo"
+        | TypeModel.Option _ | TypeModel.Tuple _ -> lowerFirst (TypeModel.typeInfoToPascalName info.Raw) + "JsonTypeInfo"
         | _ -> lowerFirst info.Raw.TypeName + "JsonTypeInfo"
 
     let emitResolver (types: SerdeTypeInfo list) : string option =

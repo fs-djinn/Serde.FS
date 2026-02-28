@@ -14,9 +14,10 @@ open Fun.Build
 // Paths
 // ---------------------------------------------------------------------------
 
-let sourceGenProj = "src/FSharp.SourceDjinn/FSharp.SourceDjinn.fsproj"
-let stjProj       = "src/Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj"
-let sampleAppProj = "src/Serde.FS.SystemTextJson.SampleApp/Serde.FS.SystemTextJson.SampleApp.fsproj"
+let sourceGenProj    = "src/FSharp.SourceDjinn/FSharp.SourceDjinn.fsproj"
+let serdeSourceGenProj = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
+let stjProj          = "src/Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj"
+let sampleAppProj    = "src/Serde.FS.SystemTextJson.SampleApp/Serde.FS.SystemTextJson.SampleApp.fsproj"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -76,8 +77,12 @@ pipeline "debug" {
         )
     }
 
-    stage "Build SourceGen" {
+    stage "Build SourceDjinn" {
         run $"dotnet build {sourceGenProj}"
+    }
+
+    stage "Build Serde.FS.SourceGen" {
+        run $"dotnet build {serdeSourceGenProj}"
     }
 
     stage "Build STJ" {

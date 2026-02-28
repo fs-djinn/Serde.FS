@@ -2,7 +2,8 @@ module Serde.FS.SystemTextJson.Tests.StjCodeEmitterTests
 
 open NUnit.Framework
 open Serde.FS
-open Serde.FS.TypeKindTypes
+open FSharp.SourceDjinn
+open FSharp.SourceDjinn.TypeModel
 open Serde.FS.SystemTextJson
 
 let private emitter = StjCodeEmitter() :> ISerdeCodeEmitter
@@ -39,7 +40,7 @@ let private mkOptionInfo (inner: TypeInfo) : SerdeTypeInfo =
 /// Helper to build a SerdeTypeInfo for a simple record.
 let private mkRecordInfo ns typeName cap (fields: SerdeFieldInfo list) : SerdeTypeInfo =
     let rawFields =
-        fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : TypeKindTypes.FieldInfo)
+        fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : TypeModel.FieldInfo)
     {
         Raw = {
             Namespace = ns
@@ -150,7 +151,7 @@ namespace TestApp
 [<Serde>]
 type Person = { FName: string; LName: string; Age: int }
 """
-    let types = FSharp.SourceDjinn.AstParser.parseSource "/test.fs" source
+    let types = Serde.FS.SourceGen.SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let code = emitter.Emit(types.[0])
@@ -308,7 +309,7 @@ let ``Emits option handling for nested record option field`` () =
 
 /// Helper to build a tuple TypeInfo from a list of element TypeInfos.
 let private mkTupleType (elements: TypeInfo list) : TypeInfo =
-    let fields = elements |> List.mapi (fun i ti -> { Name = sprintf "Item%d" (i+1); Type = ti; Attributes = [] } : TypeKindTypes.FieldInfo)
+    let fields = elements |> List.mapi (fun i ti -> { Name = sprintf "Item%d" (i+1); Type = ti; Attributes = [] } : TypeModel.FieldInfo)
     { Namespace = None; EnclosingModules = []; TypeName = "tuple"; Kind = Tuple fields; Attributes = [] }
 
 /// Helper to build a SerdeTypeInfo for a tuple type.
@@ -384,20 +385,20 @@ let ``EmitResolver with mixed record option and tuple types`` () =
 [<Test>]
 let ``typeInfoToPascalName produces IntStringTuple`` () =
     let ti = mkTupleType [ mkPrimType "int" Int32; mkPrimType "string" String ]
-    let name = TypeKindTypes.typeInfoToPascalName ti
+    let name = TypeModel.typeInfoToPascalName ti
     Assert.That(name, Is.EqualTo("IntStringTuple"))
 
 [<Test>]
 let ``typeInfoToFqFSharpType produces parenthesized tuple`` () =
     let ti = mkTupleType [ mkPrimType "int" Int32; mkPrimType "string" String ]
-    let fq = TypeKindTypes.typeInfoToFqFSharpType ti
+    let fq = TypeModel.typeInfoToFqFSharpType ti
     Assert.That(fq, Is.EqualTo("(int * string)"))
 
 [<Test>]
 let ``typeInfoToFqFSharpType produces parenthesized tuple nested in option`` () =
     let ti = mkTupleType [ mkPrimType "int" Int32; mkPrimType "string" String ]
     let optTi = mkOptionType ti
-    let fq = TypeKindTypes.typeInfoToFqFSharpType optTi
+    let fq = TypeModel.typeInfoToFqFSharpType optTi
     Assert.That(fq, Is.EqualTo("(int * string) option"))
 
 // --- Enum tests ---
@@ -406,7 +407,7 @@ let ``typeInfoToFqFSharpType produces parenthesized tuple nested in option`` () 
 let private mkEnumInfo ns typeName (cases: SerdeEnumCaseInfo list) : SerdeTypeInfo =
     let rawCases =
         cases |> List.map (fun c ->
-            { CaseName = c.RawCaseName; Value = c.Value; Attributes = [] } : TypeKindTypes.EnumCase)
+            { CaseName = c.RawCaseName; Value = c.Value; Attributes = [] } : TypeModel.EnumCase)
     {
         Raw = {
             Namespace = ns
@@ -492,7 +493,7 @@ type Color =
     | Green = 2
     | Blue = 3
 """
-    let types = FSharp.SourceDjinn.AstParser.parseSource "/test.fs" source
+    let types = Serde.FS.SourceGen.SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let code = emitter.Emit(types.[0])
@@ -527,9 +528,9 @@ let private mkUnionInfo ns typeName (cases: SerdeUnionCaseInfo list) : SerdeType
     let rawCases =
         cases |> List.map (fun c ->
             { CaseName = c.RawCaseName
-              Fields = c.Fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : TypeKindTypes.FieldInfo)
+              Fields = c.Fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : TypeModel.FieldInfo)
               Tag = c.Tag
-              Attributes = [] } : TypeKindTypes.UnionCase)
+              Attributes = [] } : TypeModel.UnionCase)
     {
         Raw = {
             Namespace = ns
@@ -696,7 +697,7 @@ type Shape =
     | Circle of radius: float
     | Point
 """
-    let types = FSharp.SourceDjinn.AstParser.parseSource "/test.fs" source
+    let types = Serde.FS.SourceGen.SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
 
     let code = emitter.Emit(types.[0])

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -8,26 +8,14 @@
   <ItemGroup>
     <Compile Include="TypeKindExtractor.fs" />
     <Compile Include="AstParser.fs" />
-    <Compile Include="CodeEmitter.fs" />
-    <Compile Include="SerdeGeneratorTask.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FSharp.Compiler.Service" Version="43.10.103" />
-    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.3.3" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
+    <ProjectReference Include="..\FSharp.SourceDjinn.TypeModel\FSharp.SourceDjinn.TypeModel.fsproj" />
   </ItemGroup>
-
-
-	<Target Name="CopyFSharpCore" AfterTargets="Build">
-		<Copy SourceFiles="$(NuGetPackageRoot)fsharp.core\10.0.103\lib\netstandard2.0\FSharp.Core.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
-	</Target>
-
-	<Target Name="CopyFSharpCompilerService" AfterTargets="Build">
-		<Copy SourceFiles="$(NuGetPackageRoot)fsharp.compiler.service\43.10.103\lib\netstandard2.0\FSharp.Compiler.Service.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
-	</Target>
 
 </Project>

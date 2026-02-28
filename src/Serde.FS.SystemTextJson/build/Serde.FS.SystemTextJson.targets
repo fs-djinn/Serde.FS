@@ -1,6 +1,6 @@
 <Project>
-  <UsingTask TaskName="FSharp.SourceDjinn.SerdeGeneratorTask"
-             AssemblyFile="$(MSBuildThisFileDirectory)../analyzers/dotnet/fs/FSharp.SourceDjinn.dll" />
+  <UsingTask TaskName="Serde.FS.SourceGen.SerdeGeneratorTask"
+             AssemblyFile="$(MSBuildThisFileDirectory)../analyzers/dotnet/fs/Serde.FS.SourceGen.dll" />
 
   <Target Name="SerdeGenerate" BeforeTargets="CoreCompile">
 

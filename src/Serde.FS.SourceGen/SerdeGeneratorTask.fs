@@ -1,12 +1,12 @@
-namespace FSharp.SourceDjinn
+namespace Serde.FS.SourceGen
 
 open System.IO
 open Serde.FS
+open FSharp.SourceDjinn.TypeModel
 open Microsoft.Build.Utilities
 open Microsoft.Build.Framework
 
 module private OptionDiscovery =
-    open Serde.FS.TypeKindTypes
 
     /// Recursively collects all distinct option TypeInfos from a TypeInfo.
     let rec private collectOptionTypes (ti: TypeInfo) (acc: Map<string, TypeInfo>) : Map<string, TypeInfo> =
@@ -49,7 +49,6 @@ module private OptionDiscovery =
         }
 
 module private TupleDiscovery =
-    open Serde.FS.TypeKindTypes
 
     /// Recursively collects all distinct tuple TypeInfos from a TypeInfo.
     let rec private collectTupleTypes (ti: TypeInfo) (acc: Map<string, TypeInfo>) : Map<string, TypeInfo> =
@@ -90,7 +89,6 @@ module private TupleDiscovery =
         }
 
 module private FieldTypeResolver =
-    open Serde.FS.TypeKindTypes
 
     /// Recursively resolves unqualified type references in a TypeInfo
     /// using a lookup map built from all parsed types.
@@ -159,7 +157,7 @@ type SerdeGeneratorTask() =
             let mutable success = true
             let mutable hasEntryPoint = false
             let parsedTypes = System.Collections.Generic.List<SerdeTypeInfo>()
-            let allTypeInfos = System.Collections.Generic.List<TypeKindTypes.TypeInfo>()
+            let allTypeInfos = System.Collections.Generic.List<TypeInfo>()
             let allTypes = System.Collections.Generic.List<SerdeTypeInfo>()
             let generatedFiles = System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
 
@@ -169,16 +167,16 @@ type SerdeGeneratorTask() =
 
                 if File.Exists(filePath) && filePath.EndsWith(".fs") then
                     try
-                        let types = AstParser.parseFile filePath
+                        let types = SerdeAstParser.parseFile filePath
                         parsedTypes.AddRange(types)
 
                         // Also collect ALL type definitions for the lookup map
-                        let allTypesInFile = AstParser.parseFileAllTypes filePath
+                        let allTypesInFile = SerdeAstParser.parseFileAllTypes filePath
                         allTypeInfos.AddRange(allTypesInFile)
 
                         // Check for entry point registration
                         if not hasEntryPoint then
-                            hasEntryPoint <- AstParser.hasEntryPointRegistrationInFile filePath
+                            hasEntryPoint <- SerdeAstParser.hasEntryPointRegistrationInFile filePath
                     with ex ->
                         this.Log.LogWarning("Serde: Failed to process {0}: {1}", filePath, ex.Message)
 
@@ -196,7 +194,7 @@ type SerdeGeneratorTask() =
 
             // Phase 3: Emit all types
             for typeInfo in resolvedTypes do
-                let code = CodeEmitter.emit emitter typeInfo
+                let code = SerdeCodeEmitter.emit emitter typeInfo
                 let outputFile = Path.Combine(this.OutputDir, sprintf "%s.serde.g.fs" typeInfo.Raw.TypeName)
                 let existingContent =
                     if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
@@ -215,8 +213,8 @@ type SerdeGeneratorTask() =
             let optionTypeInfos = OptionDiscovery.discoverOptionTypes allTypes
             for optTi in optionTypeInfos do
                 let optSerdeInfo = OptionDiscovery.mkOptionSerdeTypeInfo optTi
-                let code = CodeEmitter.emit emitter optSerdeInfo
-                let pascalName = TypeKindTypes.typeInfoToPascalName optTi
+                let code = SerdeCodeEmitter.emit emitter optSerdeInfo
+                let pascalName = typeInfoToPascalName optTi
                 let outputFile = Path.Combine(this.OutputDir, sprintf "%s.serde.g.fs" pascalName)
                 let existingContent =
                     if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
@@ -232,8 +230,8 @@ type SerdeGeneratorTask() =
             let tupleTypeInfos = TupleDiscovery.discoverTupleTypes allTypes
             for tupTi in tupleTypeInfos do
                 let tupSerdeInfo = TupleDiscovery.mkTupleSerdeTypeInfo tupTi
-                let code = CodeEmitter.emit emitter tupSerdeInfo
-                let pascalName = TypeKindTypes.typeInfoToPascalName tupTi
+                let code = SerdeCodeEmitter.emit emitter tupSerdeInfo
+                let pascalName = typeInfoToPascalName tupTi
                 let outputFile = Path.Combine(this.OutputDir, sprintf "%s.serde.g.fs" pascalName)
                 let existingContent =
                     if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
