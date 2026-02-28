@@ -475,7 +475,8 @@ module internal StjCodeEmitterImpl =
 
             append "            else null"
             append ""
-            append "do Serde.FS.SystemTextJson.SerdeStjResolverRegistry.registerResolver(SerdeStjGeneratedResolver())"
+            append "let register() ="
+            append "    Serde.FS.SystemTextJson.SerdeStjResolverRegistry.registerResolver(SerdeStjGeneratedResolver())"
 
             Some (sb.ToString())
 
