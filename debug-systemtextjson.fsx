@@ -2,12 +2,7 @@
 
 open System
 open System.IO
-open System.Text.RegularExpressions
 open Fun.Build
-
-// Usage:
-//   dotnet fsi debug-systemtextjson.fsx              runs the "debug" pipeline (default)
-//   dotnet fsi debug-systemtextjson.fsx -- -p clean  runs the "clean" pipeline
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -20,17 +15,19 @@ let sampleAppProj = "src/Serde.FS.SystemTextJson.SampleApp/Serde.FS.SystemTextJs
 let nugetLocalDir = ".nuget-local"
 
 // ---------------------------------------------------------------------------
-// Version
+// Version helpers
 // ---------------------------------------------------------------------------
 
-let readXmlElement (projPath: string) (element: string) =
+let readVersion (projPath: string) =
     let content = File.ReadAllText(projPath)
-    let m = Regex.Match(content, $"<{element}>([^<]+)</{element}>")
-    if m.Success then m.Groups.[1].Value
-    else failwith $"No <{element}> found in {projPath}"
+    let tag = "<Version>"
+    let idx = content.IndexOf(tag)
+    if idx = -1 then failwith $"No <Version> found in {projPath}"
+    let start = idx + tag.Length
+    let endIdx = content.IndexOf("</Version>", start)
+    content.Substring(start, endIdx - start).Trim()
 
-let stableVersion = readXmlElement serdeFSProj "Version"
-let djinnVersion  = readXmlElement stjProj "SourceDjinnVersion"
+let stableVersion = readVersion serdeFSProj
 let timestamp     = DateTime.UtcNow.ToString("yyyyMMddTHHmmss")
 let debugVersion  = $"{stableVersion}.debug.{timestamp}"
 
@@ -41,7 +38,7 @@ let debugVersion  = $"{stableVersion}.debug.{timestamp}"
 pipeline "debug" {
     description "Pack Serde packages and test the STJ backend via local NuGet feed"
 
-    stage "Generate timestamp" {
+    stage "Show versions" {
         run (fun _ ->
             printfn $"Stable version: {stableVersion}"
             printfn $"Timestamp:      {timestamp}"
@@ -61,16 +58,24 @@ pipeline "debug" {
         )
     }
 
-    stage "Pack Serde.FS" {
-        run $"dotnet pack {serdeFSProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion}"
+    stage "Pack Serde.FS.SourceGen" {
+        run $"dotnet clean {sourceGenProj}"
+        run $"dotnet build {sourceGenProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
+        run $"dotnet pack {sourceGenProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
     }
 
-    stage "Pack Serde.FS.SourceGen" {
-        run $"dotnet pack {sourceGenProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
+
+    stage "Pack Serde.FS" {
+        run $"dotnet clean {serdeFSProj}"
+        run $"dotnet build {serdeFSProj} -c Debug /p:PackageVersion={debugVersion}"
+        run $"dotnet pack {serdeFSProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion}"
     }
+
 
     stage "Pack Serde.FS.SystemTextJson" {
-        run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
+        run $"dotnet clean {stjProj}"
+        run $"dotnet build {stjProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
+        run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
     }
 
     stage "Restore SampleApp" {
@@ -78,7 +83,7 @@ pipeline "debug" {
     }
 
     stage "Build and run SampleApp" {
-        run $"dotnet build {sampleAppProj} --no-restore"
+        run $"dotnet build {sampleAppProj}"
         run $"dotnet run --project {sampleAppProj} --no-build"
     }
 
@@ -86,14 +91,13 @@ pipeline "debug" {
         run (fun _ ->
             printfn ""
             printfn "========================================"
-            printfn "  Debug Pipeline Summary"
+            printfn "  Serde Debug Pipeline Summary"
             printfn "========================================"
             printfn $"  Debug version:      {debugVersion}"
             printfn $"  Packed:"
             printfn $"    Serde.FS                  {debugVersion}"
             printfn $"    Serde.FS.SourceGen        {debugVersion}"
             printfn $"    Serde.FS.SystemTextJson   {debugVersion}"
-            printfn $"  Djinn version:      {djinnVersion} (nuget.org)"
             printfn $"  Restore source:     .nuget-local (--no-cache)"
             printfn $"  SampleApp resolved: {debugVersion}"
             printfn "========================================"

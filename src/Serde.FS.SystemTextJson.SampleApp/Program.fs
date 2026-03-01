@@ -2,7 +2,6 @@ module Program
 
 open Serde.FS
 open Serde.FS.SystemTextJson
-open FSharp.SourceDjinn.TypeModel
 
 [<Serde>]
 type Color =
