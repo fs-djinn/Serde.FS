@@ -2,7 +2,7 @@ namespace Serde.FS.SystemTextJson
 
 open System.Text
 open Serde.FS
-open FSharp.SourceDjinn
+open FSharp.SourceDjinn.TypeModel
 
 module internal StjCodeEmitterImpl =
 
