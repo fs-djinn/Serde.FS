@@ -1,33 +1,30 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <PackageId>Serde.FS.SourceGen</PackageId>
-    <Version>1.0.0-alpha.1</Version>
-    <IsPackable>true</IsPackable>
-    <IncludeBuildOutput>true</IncludeBuildOutput>
-    <SerdeFSVersion>1.0.0-alpha.1</SerdeFSVersion>
-    <SourceDjinnVersion>0.1.0</SourceDjinnVersion>
-  </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<PackageId>Serde.FS.SourceGen</PackageId>
+		<Version>1.0.0-alpha.1</Version>
+		<IsPackable>true</IsPackable>
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<SerdeFSVersion>1.0.0-alpha.1</SerdeFSVersion>
+		<SourceDjinnVersion>0.1.0</SourceDjinnVersion>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <Compile Include="SerdeMetadata.fs" />
-    <Compile Include="ISerdeCodeEmitter.fs" />
-    <Compile Include="DebugEmitter.fs" />
-    <Compile Include="SerdeAstParser.fs" />
-    <Compile Include="SerdeCodeEmitter.fs" />
-    <Compile Include="SerdeGeneratorTask.fs" />
-  </ItemGroup>
+	<ItemGroup>
+		<Compile Include="SerdeMetadata.fs" />
+		<Compile Include="ISerdeCodeEmitter.fs" />
+		<Compile Include="DebugEmitter.fs" />
+		<Compile Include="SerdeAstParser.fs" />
+		<Compile Include="SerdeCodeEmitter.fs" />
+		<Compile Include="SerdeGeneratorTask.fs" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Include="bin\$(Configuration)\net8.0\Serde.FS.SourceGen.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.3.3" />
-    <PackageReference Include="Serde.FS" Version="$(SerdeFSVersion)" />
-    <PackageReference Include="FSharp.SourceDjinn" Version="$(SourceDjinnVersion)" PrivateAssets="all" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.3.3" />
+		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
+		<PackageReference Include="FSharp.SourceDjinn" Version="0.1.1" PrivateAssets="all" />
+		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.1.0" />
+	</ItemGroup>
 
 </Project>
