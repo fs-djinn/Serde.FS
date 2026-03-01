@@ -1,6 +1,6 @@
 namespace Serde.FS
 
-open FSharp.SourceDjinn.Types
+open FSharp.SourceDjinn.TypeModel.Types
 
 type SerdeCapability =
     | Serialize

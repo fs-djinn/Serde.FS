@@ -1,7 +1,8 @@
 module Serde.FS.SourceGen.Tests.SerdeAstParserTests
 
 open NUnit.Framework
-open FSharp.SourceDjinn.Types
+open FSharp.SourceDjinn.TypeModel.Types
+open Serde.FS
 open Serde.FS.SourceGen
 
 [<Test>]

@@ -1,7 +1,7 @@
 namespace Serde.FS.SourceGen
 
 open Serde.FS
-open FSharp.SourceDjinn.Types
+open FSharp.SourceDjinn.TypeModel.Types
 open FSharp.SourceDjinn
 
 module SerdeAstParser =

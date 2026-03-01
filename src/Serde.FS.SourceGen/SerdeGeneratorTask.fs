@@ -3,7 +3,7 @@ namespace Serde.FS.SourceGen
 open System.IO
 open Serde.FS
 open FSharp.SourceDjinn
-open FSharp.SourceDjinn.Types
+open FSharp.SourceDjinn.TypeModel.Types
 open Microsoft.Build.Utilities
 open Microsoft.Build.Framework
 
