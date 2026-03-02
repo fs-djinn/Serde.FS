@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -6,12 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="StjCodeEmitter.fs">
-      <PackagePath>analyzers/dotnet/fs</PackagePath>
-      <Pack>true</Pack>
-    </None>
+    <Compile Include="StjCodeEmitter.fs" />
   </ItemGroup>
 
-  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj" />
+    <PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.1.1" />
+  </ItemGroup>
 
 </Project>

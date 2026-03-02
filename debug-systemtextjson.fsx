@@ -87,6 +87,7 @@ pipeline "debug" {
 
 
     stage "Pack Serde.FS.SystemTextJson" {
+        run $"dotnet restore {stjProj} --no-cache /p:SourceGenVersion={debugVersion}"
         run $"dotnet clean {stjProj}"
         run $"dotnet build {stjProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
         run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"

@@ -46,16 +46,14 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!--
-		<None Include="..\Serde.FS.SourceGen\bin\$(Configuration)\net8.0\Serde.FS.SourceGen.dll"
-			  Pack="true"
-			  PackagePath="analyzers/dotnet/fs" />
-		
-		<None Include="$(OutputPath)Serde.FS.SystemTextJson.dll"
-			  Pack="true"
-			  PackagePath="analyzers/dotnet/fs" />
-		-->
-		<None Include="..\Serde.FS.SystemTextJson.DesignTime\bin\$(Configuration)\net8.0\Serde.FS.SystemTextJson.DesignTime.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
+		<!-- SourceGen task DLL + all its dependencies (design-time only) -->
+		<None Include="..\Serde.FS.SourceGen\bin\$(Configuration)\net8.0\*.dll"
+		      Pack="true"
+		      PackagePath="analyzers/dotnet/fs" />
+		<!-- DesignTime emitter DLL -->
+		<None Include="..\Serde.FS.SystemTextJson.DesignTime\bin\$(Configuration)\net8.0\Serde.FS.SystemTextJson.DesignTime.dll"
+		      Pack="true"
+		      PackagePath="analyzers/dotnet/fs" />
 	</ItemGroup>
 
 	<ItemGroup>
