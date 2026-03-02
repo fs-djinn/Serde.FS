@@ -41,7 +41,6 @@ Serde.FS.Json is the first backend, providing a high‑performance JSON serializ
 ### 1. Install packages
 
 ```bash
-dotnet add package Serde.FS
 dotnet add package Serde.FS.Json
 ```
 
