@@ -93,12 +93,26 @@ pipeline "debug" {
         run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
     }
 
+    stage "Write SampleApp version props" {
+        run (fun _ ->
+            let propsPath = Path.Combine(Path.GetDirectoryName(sampleAppProj), "Directory.Build.props")
+            let content = $"""<Project>
+  <PropertyGroup>
+    <SerdeJsonVersion>{debugVersion}</SerdeJsonVersion>
+  </PropertyGroup>
+</Project>
+"""
+            File.WriteAllText(propsPath, content)
+            printfn $"  Wrote {propsPath} with SerdeJsonVersion={debugVersion}"
+        )
+    }
+
     stage "Restore SampleApp" {
-        run $"dotnet restore {sampleAppProj} --no-cache /p:SerdeJsonVersion={debugVersion}"
+        run $"dotnet restore {sampleAppProj} --no-cache"
     }
 
     stage "Build and run SampleApp" {
-        run $"dotnet build {sampleAppProj} --no-restore /p:SerdeJsonVersion={debugVersion}"
+        run $"dotnet build {sampleAppProj} --no-restore"
         run $"dotnet run --project {sampleAppProj} --no-build"
     }
 
