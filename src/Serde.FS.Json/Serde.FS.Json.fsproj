@@ -16,10 +16,12 @@
 			High‑performance JSON backend for Serde.FS. Uses generated serializers—no reflection, no runtime inference. Includes JSON‑specific converter support and design‑time code generation.
 		</Description>
 
-		<PackageTags>fsharp;serde;json;system-text-json;fs-djinn;djinn</PackageTags>
+		<PackageTags>fsharp;serde;json;serialization;source-generator;fs-djinn</PackageTags>
 
 		<!-- Runtime DLLs go to lib/, design-time DLLs go to analyzers/ -->
 		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<IncludeAnalyzer>true</IncludeAnalyzer>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	</PropertyGroup>
 
 	<!-- Runtime Serde backend implementation -->

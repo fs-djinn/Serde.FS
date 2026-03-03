@@ -11,10 +11,13 @@
 		<Description>
 			Source generator for Serde.FS. Produces metadata and serializers for [Serde] types with full recursive strictness validation. Used by all Serde.FS backends.
 		</Description>
+		<PackageTags>fsharp;source-generator;serde;source-generator;fs-djinn</PackageTags>
 
 		<!-- Packed as an analyzer package (design-time only) -->
 		<IsPackable>true</IsPackable>
-		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+		<IncludeAnalyzer>true</IncludeAnalyzer>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 
 		<!-- Ensures all referenced DLLs are copied into the output folder
          so they can be packed into analyzers/ -->

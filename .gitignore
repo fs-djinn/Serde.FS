@@ -62,3 +62,4 @@ nunit-*.xml
 /src/FSharp.SourceDjinn/analyzers/dotnet/fs/*.dll
 .nuget-local/
 .debug-counter
+.build/

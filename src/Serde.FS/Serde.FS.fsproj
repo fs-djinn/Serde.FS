@@ -9,7 +9,9 @@
 		<Description>
 			Strict, deterministic serialization core for F#. Provides the [Serde] attribute, metadata model, and compile‑time validation used by all Serde.FS backends. Backend‑agnostic and reflection‑free.
 		</Description>
+		<PackageTags>fsharp;serde;serialization;strict;deterministic;fs-djinn</PackageTags>
 		<IsPackable>true</IsPackable>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	</PropertyGroup>
 
 	<ItemGroup>
