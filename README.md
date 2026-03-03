@@ -58,7 +58,7 @@ That’s the entire workflow: **opt in → generate → serialize**.
 - **Strict, Serde‑style serialization** — Only `[<Serde>]` types participate.  
 - **Compile‑time validation** — Nested types must also be annotated.  
 - **Deterministic code generation** — Stable, predictable serializers.  
-- **Fast runtime backend** — Generated code, no reflection.  
+- **Fast runtime backend** — F# Source Generated code, no reflection.  
 - **Custom converters** — Override behavior per‑type without weakening strictness.  
 - **Backend‑agnostic design** — JSON today, TOML/YAML tomorrow.
 
