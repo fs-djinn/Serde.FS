@@ -137,6 +137,22 @@ Not designed for dynamic JSON, schema‑drifting storage, partial deserializatio
 
 ---
 
+### 🏁 Custom EntryPoint for CLI apps  
+F# requires the real `[<EntryPoint>]` function to appear last in compilation order.  
+Because Serde.FS uses source generation, it cannot safely generate the real entry point directly.  
+ 
+To solve this, mark your intended entry point with:  
+ 
+```fsharp
+[<FSharp.SourceDjinn.EntryPoint>]
+let main argv = ...
+```  
+ 
+SourceDjinn will generate the actual `[<EntryPoint>]` wrapper in a separate file so it appears in the correct place in the compilation order.
+
+---
+
+
 ## 🧩 How It Works
 
 ```
