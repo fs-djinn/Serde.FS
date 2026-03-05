@@ -59,7 +59,7 @@ pipeline "build" {
     }
 
     stage "Pack Serde.FS.Json" {
-        run $"dotnet restore {jsonProj} /p:SourceGenVersion={serdeVersion} --source {buildDir} --source https://api.nuget.org/v3/index.json"
+        run $"""dotnet restore {jsonProj} /p:SourceGenVersion={serdeVersion} --source {Path.GetFullPath(buildDir)} --source "https://api.nuget.org/v3/index.json" """
         run $"dotnet clean {jsonProj}"
         run $"dotnet build {jsonProj} -c Release /p:PackageVersion={jsonVersion} /p:SerdeFSVersion={serdeVersion} /p:SourceGenVersion={serdeVersion}"
         run $"dotnet pack {jsonProj} -c Release -o {buildDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={jsonVersion} /p:SerdeFSVersion={serdeVersion} /p:SourceGenVersion={serdeVersion}"
