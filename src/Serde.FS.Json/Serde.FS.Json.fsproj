@@ -39,10 +39,10 @@
 		<PackageReference Include="System.Text.Json" Version="10.0.3" />
 
 		<!-- Runtime type model used by the backend -->
-		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.1.1" />
+		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
 
 		<!-- Design-time only dependency (never flows to consumers) -->
-		<PackageReference Include="FSharp.SourceDjinn" Version="0.1.4" PrivateAssets="all" />
+		<PackageReference Include="FSharp.SourceDjinn" Version="0.2.2" PrivateAssets="all" />
 
 		<!-- Core Serde.FS runtime library -->
 		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />

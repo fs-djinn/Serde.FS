@@ -6,7 +6,7 @@ open Serde.FS
 open Serde.FS.SourceGen
 
 let private mkTypeInfo ns modules name kind : TypeInfo =
-    { Namespace = ns; EnclosingModules = modules; TypeName = name; Kind = kind; Attributes = [] }
+    { Namespace = ns; EnclosingModules = modules; TypeName = name; Kind = kind; Attributes = []; GenericParameters = []; GenericArguments = [] }
 
 let private mkPrimitive name prim : TypeInfo =
     mkTypeInfo None [] name (Primitive prim)
@@ -35,6 +35,7 @@ let private mkSerdeType ns modules name fields unionCases : SerdeTypeInfo =
         Fields = fields
         UnionCases = unionCases
         EnumCases = None
+        GenericContext = None
     }
 
 [<Test>]
@@ -56,7 +57,8 @@ let ``Union case with unmarked record payload produces error`` () =
           ConverterType = None
           Fields = None
           UnionCases = Some [ mkUnionCase "Dog" [ mkField "Item" nameTi ] ]
-          EnumCases = None }
+          EnumCases = None
+          GenericContext = None }
     let serdeNames = set [ "Program.Pet" ]
     let errors = NestedTypeValidator.validate serdeNames [ petType ]
     Assert.That(errors.Length, Is.EqualTo(1))

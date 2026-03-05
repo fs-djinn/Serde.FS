@@ -48,6 +48,7 @@ module private OptionDiscovery =
             Fields = None
             UnionCases = None
             EnumCases = None
+            GenericContext = None
         }
 
 module private TupleDiscovery =
@@ -89,7 +90,79 @@ module private TupleDiscovery =
             Fields = None
             UnionCases = None
             EnumCases = None
+            GenericContext = None
         }
+
+module private GenericDiscovery =
+
+    /// Key for looking up generic definitions: (namespace, name, arity)
+    type SerdeDefinitionKey = string option * string * int
+
+    let definitionKey (ti: TypeInfo) : SerdeDefinitionKey =
+        (ti.Namespace, ti.TypeName, ti.GenericParameters.Length)
+
+    /// Build a map of Serde generic definitions from all parsed Serde types.
+    let buildDefinitionMap (types: SerdeTypeInfo seq) : Map<SerdeDefinitionKey, SerdeTypeInfo> =
+        types
+        |> Seq.filter (fun t -> t.Raw.IsGenericDefinition)
+        |> Seq.map (fun t -> definitionKey t.Raw, t)
+        |> Map.ofSeq
+
+    /// Try to find the Serde definition for a constructed generic TypeInfo.
+    let tryFindDefinition (definitions: Map<SerdeDefinitionKey, SerdeTypeInfo>) (constructed: TypeInfo) : SerdeTypeInfo option =
+        if not constructed.IsConstructedGeneric then None
+        else
+            let key = (constructed.Namespace, constructed.TypeName, constructed.GenericArguments.Length)
+            Map.tryFind key definitions
+
+    /// Recursively collects all constructed generic TypeInfos from a TypeInfo.
+    let rec private collectConstructedGenerics (ti: TypeInfo) (acc: Map<string, TypeInfo>) : Map<string, TypeInfo> =
+        match ti.Kind with
+        | ConstructedGenericType ->
+            // Recurse into generic arguments first (dependency order: inner generics first)
+            let acc = ti.GenericArguments |> List.fold (fun a arg -> collectConstructedGenerics arg a) acc
+            let key = typeInfoToPascalName ti
+            if acc |> Map.containsKey key then acc
+            else acc |> Map.add key ti
+        | Option inner | List inner | Array inner | Set inner ->
+            collectConstructedGenerics inner acc
+        | Map (k, v) ->
+            let acc = collectConstructedGenerics k acc
+            collectConstructedGenerics v acc
+        | Tuple elements ->
+            elements |> List.fold (fun a f -> collectConstructedGenerics f.Type a) acc
+        | _ -> acc
+
+    /// Scan all fields and union case fields of all Serde types, returning distinct
+    /// constructed generic TypeInfos in dependency order.
+    let discoverConstructedGenerics (types: SerdeTypeInfo seq) : TypeInfo list =
+        let mutable acc = Map.empty
+        for t in types do
+            match t.Fields with
+            | Some fields ->
+                for f in fields do
+                    acc <- collectConstructedGenerics f.Type acc
+            | None -> ()
+            match t.UnionCases with
+            | Some cases ->
+                for c in cases do
+                    for f in c.Fields do
+                        acc <- collectConstructedGenerics f.Type acc
+            | None -> ()
+        acc |> Map.toList |> List.map snd
+
+    /// Build a SerdeTypeInfo for a constructed generic by instantiating its definition.
+    let buildConstructedSerdeTypeInfo (defInfo: SerdeTypeInfo) (constructed: TypeInfo) : SerdeTypeInfo =
+        let instantiated = TypeInfo.instantiate defInfo.Raw constructed.GenericArguments
+        // Preserve namespace/modules from the constructed reference
+        let instantiated = { instantiated with Namespace = constructed.Namespace; EnclosingModules = constructed.EnclosingModules }
+        let baseInfo = SerdeMetadataBuilder.buildSerdeTypeInfo instantiated
+        { baseInfo with
+            GenericContext = Some {
+                DefinitionType = defInfo.Raw
+                GenericParameters = defInfo.Raw.GenericParameters
+                GenericArguments = constructed.GenericArguments
+            } }
 
 module private FieldTypeResolver =
 
@@ -97,7 +170,16 @@ module private FieldTypeResolver =
     /// using a lookup map built from all parsed types.
     let rec resolveTypeInfo (lookup: Map<string, TypeInfo>) (ti: TypeInfo) : TypeInfo =
         match ti.Kind with
-        | Primitive _ -> ti
+        | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> ti
+        | ConstructedGenericType ->
+            // Resolve the base type name and recurse into generic arguments
+            let resolved =
+                if ti.Namespace.IsNone then
+                    match Map.tryFind ti.TypeName lookup with
+                    | Some r -> { ti with Namespace = r.Namespace; EnclosingModules = r.EnclosingModules }
+                    | None -> ti
+                else ti
+            { resolved with GenericArguments = resolved.GenericArguments |> List.map (resolveTypeInfo lookup) }
         | Record _ | AnonymousRecord _ | Union _ | Enum _ ->
             if ti.Namespace.IsNone then
                 match Map.tryFind ti.TypeName lookup with
@@ -134,11 +216,22 @@ module internal NestedTypeValidator =
             [ yield! ti.Namespace |> Option.toList
               yield! ti.EnclosingModules
               yield ti.TypeName ]
-        String.concat "." parts
+        let baseName = String.concat "." parts
+        if ti.IsConstructedGeneric then
+            let argNames = ti.GenericArguments |> List.map typeInfoToFqFSharpType
+            sprintf "%s<%s>" baseName (String.concat ", " argNames)
+        else baseName
 
     let rec private validateTypeInfo (serdeNames: Set<string>) (ti: TypeInfo) : string list =
         match ti.Kind with
-        | Primitive _ -> []
+        | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> []
+        | ConstructedGenericType ->
+            // Constructed generics are valid if they were discovered and added to serdeNames
+            let fqn = fullyQualifiedName ti
+            if serdeNames.Contains fqn then []
+            else
+                // Validate each generic argument individually
+                ti.GenericArguments |> List.collect (validateTypeInfo serdeNames)
         | Option inner | List inner | Array inner | Set inner ->
             validateTypeInfo serdeNames inner
         | Map (k, v) ->
@@ -248,15 +341,41 @@ type SerdeGeneratorTask() =
                     | None -> sti)
                 |> Seq.toList
 
+            // Phase 2.3: Discover constructed generics from fields/union cases
+            let genericDefinitions = GenericDiscovery.buildDefinitionMap resolvedTypes
+            let constructedGenerics = GenericDiscovery.discoverConstructedGenerics resolvedTypes
+            let constructedSerdeTypes = System.Collections.Generic.List<SerdeTypeInfo>()
+            let mutable genericErrors = []
+            for constructed in constructedGenerics do
+                match GenericDiscovery.tryFindDefinition genericDefinitions constructed with
+                | Some defInfo ->
+                    let serdeInfo = GenericDiscovery.buildConstructedSerdeTypeInfo defInfo constructed
+                    constructedSerdeTypes.Add(serdeInfo)
+                | None ->
+                    let fqn = typeInfoToFqFSharpType constructed
+                    genericErrors <- (sprintf "Serde error: Type '%s' is used in serialization, but '%s' is not marked with [<Serde>]." fqn constructed.TypeName) :: genericErrors
+
+            for msg in genericErrors do
+                this.Log.LogError(msg)
+            if not (List.isEmpty genericErrors) then
+                success <- false
+
+            let resolvedTypes = resolvedTypes @ (constructedSerdeTypes |> Seq.toList)
+
             // Phase 2.5: Validate nested user-defined types have Serde metadata
             let serdeTypeNames =
-                parsedTypes
+                resolvedTypes
                 |> Seq.map (fun t ->
                     let parts =
                         [ yield! t.Raw.Namespace |> Option.toList
                           yield! t.Raw.EnclosingModules
                           yield t.Raw.TypeName ]
-                    String.concat "." parts)
+                    let baseName = String.concat "." parts
+                    match t.GenericContext with
+                    | Some ctx ->
+                        let argNames = ctx.GenericArguments |> List.map typeInfoToFqFSharpType
+                        sprintf "%s<%s>" baseName (String.concat ", " argNames)
+                    | None -> baseName)
                 |> Set.ofSeq
             let violations = NestedTypeValidator.validate serdeTypeNames resolvedTypes
             for msg in violations do
@@ -265,10 +384,22 @@ type SerdeGeneratorTask() =
                 success <- false
 
             if success then
-                // Phase 3: Emit all types
+                // Phase 3: Emit all types (skip generic definitions — only emit concrete types)
                 for typeInfo in resolvedTypes do
+                    if typeInfo.Raw.IsGenericDefinition then () else
+                    let fileName =
+                        match typeInfo.GenericContext with
+                        | Some ctx ->
+                            let rec argPascalName (ti: TypeInfo) =
+                                if not ti.GenericArguments.IsEmpty then
+                                    let argPart = ti.GenericArguments |> List.map argPascalName |> String.concat ""
+                                    typeInfoToPascalName { ti with GenericArguments = [] } + argPart
+                                else typeInfoToPascalName ti
+                            let argNames = ctx.GenericArguments |> List.map argPascalName
+                            sprintf "%s_%s" typeInfo.Raw.TypeName (String.concat "" argNames)
+                        | None -> typeInfo.Raw.TypeName
                     let code = SerdeCodeEmitter.emit emitter typeInfo
-                    let outputFile = Path.Combine(this.OutputDir, sprintf "%s.serde.g.fs" typeInfo.Raw.TypeName)
+                    let outputFile = Path.Combine(this.OutputDir, sprintf "%s.serde.g.fs" fileName)
                     let existingContent =
                         if File.Exists(outputFile) then Some (File.ReadAllText(outputFile))
                         else None

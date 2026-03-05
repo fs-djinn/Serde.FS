@@ -12,7 +12,7 @@ let private resolverEmitter = JsonCodeEmitter() :> ISerdeResolverEmitter
 
 /// Helper to build a simple field TypeInfo from a type name and primitive kind.
 let private mkPrimType name kind : TypeInfo =
-    { Namespace = None; EnclosingModules = []; TypeName = name; Kind = Primitive kind; Attributes = [] }
+    { Namespace = None; EnclosingModules = []; TypeName = name; Kind = Primitive kind; Attributes = []; GenericParameters = []; GenericArguments = [] }
 
 /// Helper to build a SerdeFieldInfo from a name and a simple primitive type.
 let private mkField name typeName kind : SerdeFieldInfo =
@@ -24,7 +24,7 @@ let private mkFieldWithType name (typeInfo: TypeInfo) : SerdeFieldInfo =
 
 /// Helper to build an option TypeInfo wrapping an inner TypeInfo.
 let private mkOptionType (inner: TypeInfo) : TypeInfo =
-    { Namespace = None; EnclosingModules = []; TypeName = "option"; Kind = Option inner; Attributes = [] }
+    { Namespace = None; EnclosingModules = []; TypeName = "option"; Kind = Option inner; Attributes = []; GenericParameters = []; GenericArguments = [] }
 
 /// Helper to build a SerdeTypeInfo for an option type.
 let private mkOptionInfo (inner: TypeInfo) : SerdeTypeInfo =
@@ -37,6 +37,7 @@ let private mkOptionInfo (inner: TypeInfo) : SerdeTypeInfo =
         Fields = None
         UnionCases = None
         EnumCases = None
+        GenericContext = None
     }
 
 /// Helper to build a SerdeTypeInfo for a simple record.
@@ -50,6 +51,8 @@ let private mkRecordInfo ns typeName cap (fields: SerdeFieldInfo list) : SerdeTy
             TypeName = typeName
             Kind = Record rawFields
             Attributes = []
+            GenericParameters = []
+            GenericArguments = []
         }
         Capability = cap
         Attributes = SerdeAttributes.empty
@@ -57,6 +60,7 @@ let private mkRecordInfo ns typeName cap (fields: SerdeFieldInfo list) : SerdeTy
         Fields = Some fields
         UnionCases = None
         EnumCases = None
+        GenericContext = None
     }
 
 [<Test>]
@@ -108,6 +112,7 @@ let ``Emits option handling for optional fields`` () =
     let optionType = {
         Namespace = None; EnclosingModules = []; TypeName = "option"
         Kind = Option (mkPrimType "string" String); Attributes = []
+        GenericParameters = []; GenericArguments = []
     }
     let info = mkRecordInfo (Some "MyApp") "Person" Serialize [
         mkFieldWithType "MiddleName" optionType
@@ -225,6 +230,7 @@ let ``Emits converter for option record`` () =
     let personType : TypeInfo = {
         Namespace = Some "MyApp"; EnclosingModules = []; TypeName = "Person"
         Kind = Record []; Attributes = []
+        GenericParameters = []; GenericArguments = []
     }
     let info = mkOptionInfo personType
     let code = emitter.Emit(info)
@@ -264,6 +270,7 @@ let ``Emits fully-qualified type for nested record field`` () =
     let addressType : TypeInfo = {
         Namespace = Some "My.App"; EnclosingModules = []; TypeName = "Address"
         Kind = Record []; Attributes = []
+        GenericParameters = []; GenericArguments = []
     }
     let info = mkRecordInfo (Some "My.App") "User" Both [
         mkField "Name" "string" String
@@ -281,6 +288,7 @@ let ``Emits fully-qualified type for nested record from another module`` () =
     let addressType : TypeInfo = {
         Namespace = Some "Outer"; EnclosingModules = ["Inner"]; TypeName = "Address"
         Kind = Record []; Attributes = []
+        GenericParameters = []; GenericArguments = []
     }
     let info = mkRecordInfo (Some "My.App") "User" Both [
         mkFieldWithType "Address" addressType
@@ -296,10 +304,12 @@ let ``Emits option handling for nested record option field`` () =
     let addressType : TypeInfo = {
         Namespace = Some "My.App"; EnclosingModules = []; TypeName = "Address"
         Kind = Record []; Attributes = []
+        GenericParameters = []; GenericArguments = []
     }
     let optionType = {
         Namespace = None; EnclosingModules = []; TypeName = "option"
         Kind = Option addressType; Attributes = []
+        GenericParameters = []; GenericArguments = []
     }
     let info = mkRecordInfo (Some "My.App") "User" Both [
         mkFieldWithType "Address" optionType
@@ -313,7 +323,7 @@ let ``Emits option handling for nested record option field`` () =
 /// Helper to build a tuple TypeInfo from a list of element TypeInfos.
 let private mkTupleType (elements: TypeInfo list) : TypeInfo =
     let fields = elements |> List.mapi (fun i ti -> { Name = sprintf "Item%d" (i+1); Type = ti; Attributes = [] } : Types.FieldInfo)
-    { Namespace = None; EnclosingModules = []; TypeName = "tuple"; Kind = Tuple fields; Attributes = [] }
+    { Namespace = None; EnclosingModules = []; TypeName = "tuple"; Kind = Tuple fields; Attributes = []; GenericParameters = []; GenericArguments = [] }
 
 /// Helper to build a SerdeTypeInfo for a tuple type.
 let private mkTupleInfo (elements: TypeInfo list) : SerdeTypeInfo =
@@ -326,6 +336,7 @@ let private mkTupleInfo (elements: TypeInfo list) : SerdeTypeInfo =
         Fields = None
         UnionCases = None
         EnumCases = None
+        GenericContext = None
     }
 
 [<Test>]
@@ -358,6 +369,7 @@ let ``Emits converter for tuple containing record`` () =
     let addressType : TypeInfo = {
         Namespace = Some "My.App"; EnclosingModules = []; TypeName = "Address"
         Kind = Record []; Attributes = []
+        GenericParameters = []; GenericArguments = []
     }
     let info = mkTupleInfo [ mkPrimType "int" Int32; addressType ]
     let code = emitter.Emit(info)
@@ -419,6 +431,8 @@ let private mkEnumInfo ns typeName (cases: SerdeEnumCaseInfo list) : SerdeTypeIn
             TypeName = typeName
             Kind = Enum rawCases
             Attributes = []
+            GenericParameters = []
+            GenericArguments = []
         }
         Capability = Both
         Attributes = SerdeAttributes.empty
@@ -426,6 +440,7 @@ let private mkEnumInfo ns typeName (cases: SerdeEnumCaseInfo list) : SerdeTypeIn
         Fields = None
         UnionCases = None
         EnumCases = Some cases
+        GenericContext = None
     }
 
 /// Helper to build a SerdeEnumCaseInfo.
@@ -543,6 +558,8 @@ let private mkUnionInfo ns typeName (cases: SerdeUnionCaseInfo list) : SerdeType
             TypeName = typeName
             Kind = Union rawCases
             Attributes = []
+            GenericParameters = []
+            GenericArguments = []
         }
         Capability = Both
         Attributes = SerdeAttributes.empty
@@ -550,6 +567,7 @@ let private mkUnionInfo ns typeName (cases: SerdeUnionCaseInfo list) : SerdeType
         Fields = None
         UnionCases = Some cases
         EnumCases = None
+        GenericContext = None
     }
 
 [<Test>]
@@ -728,6 +746,8 @@ let private mkCustomInfo ns typeName converterFqn : SerdeTypeInfo =
             TypeName = typeName
             Kind = Record [ rawField ]
             Attributes = []
+            GenericParameters = []
+            GenericArguments = []
         }
         Capability = Both
         Attributes = SerdeAttributes.empty
@@ -737,6 +757,7 @@ let private mkCustomInfo ns typeName converterFqn : SerdeTypeInfo =
         ]
         UnionCases = None
         EnumCases = None
+        GenericContext = None
     }
 
 [<Test>]

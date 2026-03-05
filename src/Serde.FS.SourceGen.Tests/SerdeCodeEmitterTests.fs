@@ -18,18 +18,21 @@ let ``CodeEmitter delegates to ISerdeCodeEmitter`` () =
             EnclosingModules = []
             TypeName = "Person"
             Kind = Record [
-                { Name = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = [] }; Attributes = [] }
+                { Name = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = []; GenericParameters = []; GenericArguments = [] }; Attributes = [] }
             ]
             Attributes = []
+            GenericParameters = []
+            GenericArguments = []
         }
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
         Fields = Some [
-            { Name = "FName"; RawName = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = [] }; Attributes = SerdeAttributes.empty; Capability = Both }
+            { Name = "FName"; RawName = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = []; GenericParameters = []; GenericArguments = [] }; Attributes = SerdeAttributes.empty; Capability = Both }
         ]
         UnionCases = None
         EnumCases = None
+        GenericContext = None
     }
 
     let code = SerdeCodeEmitter.emit emitter info
@@ -44,18 +47,21 @@ let ``DebugEmitter emits debug comment`` () =
             EnclosingModules = []
             TypeName = "Person"
             Kind = Record [
-                { Name = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = [] }; Attributes = [] }
+                { Name = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = []; GenericParameters = []; GenericArguments = [] }; Attributes = [] }
             ]
             Attributes = []
+            GenericParameters = []
+            GenericArguments = []
         }
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
         Fields = Some [
-            { Name = "FName"; RawName = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = [] }; Attributes = SerdeAttributes.empty; Capability = Both }
+            { Name = "FName"; RawName = "FName"; Type = { Namespace = None; EnclosingModules = []; TypeName = "string"; Kind = Primitive String; Attributes = []; GenericParameters = []; GenericArguments = [] }; Attributes = SerdeAttributes.empty; Capability = Both }
         ]
         UnionCases = None
         EnumCases = None
+        GenericContext = None
     }
 
     let code = emitter.Emit(info)

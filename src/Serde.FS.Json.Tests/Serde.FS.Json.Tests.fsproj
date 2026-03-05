@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="TestHelpers.fs" />
     <Compile Include="JsonCodeEmitterTests.fs" />
+    <Compile Include="GenericTests.fs" />
     <Compile Include="SerdeTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

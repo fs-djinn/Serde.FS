@@ -39,6 +39,9 @@ and [<Serde(Converter = typeof<UppercaseNameConverter>)>]
     FancyName = { Value: string }
 
 [<Serde>]
+type Wrapper<'T> = Wrapper of 'T
+
+[<Serde>]
 type Person = {
     Name: string
     Age: int
@@ -50,6 +53,7 @@ type Person = {
     PetMap: Map<string, Pet>
     Shapes: Shape list
     Fancy: FancyName
+    WrappedName: Wrapper<Name>
 }
 
 [<EntryPoint>]
@@ -70,6 +74,7 @@ let run argv =
         PetMap = pets |> List.map (fun p -> match p with Dog n -> n.Name, p | Cat name -> name, p) |> Map.ofList
         Shapes = [ Shape.Circle(3.14); Shape.Rectangle(10.0, 20.0); Shape.Point ]
         Fancy = { Value = "Jordan" }
+        WrappedName = Wrapper { Name = "Wrapped" }
     }
     let json = Serde.Serialize person
     printfn "Serialized: %s" json

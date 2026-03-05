@@ -47,6 +47,12 @@ type SerdeUnionCaseInfo = {
     Attributes: SerdeAttributes
 }
 
+type SerdeGenericContext = {
+    DefinitionType: TypeInfo
+    GenericParameters: GenericParameterInfo list
+    GenericArguments: TypeInfo list
+}
+
 type SerdeTypeInfo = {
     Raw: TypeInfo
     Capability: SerdeCapability
@@ -55,6 +61,7 @@ type SerdeTypeInfo = {
     Fields: SerdeFieldInfo list option
     UnionCases: SerdeUnionCaseInfo list option
     EnumCases: SerdeEnumCaseInfo list option
+    GenericContext: SerdeGenericContext option
 }
 
 module SerdeMetadataBuilder =
@@ -176,4 +183,5 @@ module SerdeMetadataBuilder =
             Fields = fields
             UnionCases = unionCases
             EnumCases = enumCases
+            GenericContext = None
         }
