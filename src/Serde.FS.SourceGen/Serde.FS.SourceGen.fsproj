@@ -39,6 +39,7 @@
 		<Compile Include="DebugEmitter.fs" />
 		<Compile Include="SerdeAstParser.fs" />
 		<Compile Include="SerdeCodeEmitter.fs" />
+		<Compile Include="RootGenericDiagnostics.fs" />
 		<Compile Include="SerdeGeneratorTask.fs" />
 	</ItemGroup>
 

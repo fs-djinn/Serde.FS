@@ -346,6 +346,20 @@ type SerdeGeneratorTask() =
                     | None -> sti)
                 |> Seq.toList
 
+            // Phase 2.1: Detect root-level constructed generics without explicit type args
+            let projectDir = System.IO.Directory.GetCurrentDirectory()
+            for item in this.SourceFiles do
+                let filePath = item.ItemSpec
+                if File.Exists(filePath) && filePath.EndsWith(".fs") then
+                    try
+                        let sourceText = File.ReadAllText(filePath)
+                        let diagnostics = RootGenericDiagnostics.detect resolvedTypes lookup projectDir filePath sourceText
+                        for d in diagnostics do
+                            this.Log.LogError(RootGenericDiagnostics.formatMessage d)
+                            success <- false
+                    with ex ->
+                        this.Log.LogWarning("Serde: Failed root-generic diagnostic on {0}: {1}", filePath, ex.Message)
+
             // Phase 2.3: Discover constructed generics from fields/union cases and root-level calls
             let genericDefinitions = GenericDiscovery.buildDefinitionMap resolvedTypes
             let fieldConstructedGenerics = GenericDiscovery.discoverConstructedGenerics resolvedTypes
