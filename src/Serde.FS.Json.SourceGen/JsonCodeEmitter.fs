@@ -52,6 +52,17 @@ module internal JsonCodeEmitterImpl =
         if System.String.IsNullOrEmpty(s) then s
         else string (System.Char.ToUpperInvariant(s.[0])) + s.Substring(1)
 
+    let sanitize (name: string) =
+        name
+            .Replace(".", "_")
+            .Replace("+", "_")
+            .Replace("`", "_")
+            .Replace("<", "_")
+            .Replace(">", "_")
+            .Replace(",", "_")
+            .Replace("[", "_")
+            .Replace("]", "_")
+
     let fullyQualifiedName (info: SerdeTypeInfo) : string =
         let parts =
             [ yield! info.Raw.Namespace |> Option.toList
@@ -64,9 +75,9 @@ module internal JsonCodeEmitterImpl =
     let rec private pascalNameForArg (ti: Types.TypeInfo) : string =
         if not ti.GenericArguments.IsEmpty then
             let argPart = ti.GenericArguments |> List.map pascalNameForArg |> String.concat ""
-            upperFirst ti.TypeName + argPart
+            sanitize (upperFirst ti.TypeName) + argPart
         else
-            Types.typeInfoToPascalName ti
+            sanitize (Types.typeInfoToPascalName ti)
 
     /// The name used for module/converter/function names. For constructed generics,
     /// uses underscore-separated type arguments (e.g., Wrapper_Person).
@@ -74,8 +85,8 @@ module internal JsonCodeEmitterImpl =
         match info.GenericContext with
         | Some ctx ->
             let argNames = ctx.GenericArguments |> List.map pascalNameForArg
-            sprintf "%s_%s" info.Raw.TypeName (String.concat "" argNames)
-        | None -> info.Raw.TypeName
+            sanitize $"%s{info.Raw.TypeName}_%s{String.concat "" argNames}"
+        | None -> sanitize info.Raw.TypeName
 
     /// The fully-qualified F# type expression for typeof<> / JsonTypeInfo<>.
     /// For constructed generics, produces e.g. MyApp.Wrapper<MyApp.Person>.

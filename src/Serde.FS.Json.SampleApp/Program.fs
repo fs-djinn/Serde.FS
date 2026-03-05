@@ -54,6 +54,7 @@ type Person = {
     Shapes: Shape list
     Fancy: FancyName
     WrappedName: Wrapper<Name>
+    WrappedGuid: Wrapper<System.Guid>
 }
 
 [<EntryPoint>]
@@ -75,6 +76,7 @@ let run argv =
         Shapes = [ Shape.Circle(3.14); Shape.Rectangle(10.0, 20.0); Shape.Point ]
         Fancy = { Value = "Jordan" }
         WrappedName = Wrapper { Name = "Wrapped" }
+        WrappedGuid = Wrapper (System.Guid.Parse("12345678-1234-1234-1234-123456789abc"))
     }
     let json = Serde.Serialize person
     printfn "Serialized: %s" json
