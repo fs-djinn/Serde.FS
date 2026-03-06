@@ -65,12 +65,14 @@
 	</ItemGroup>
 
 	<!-- Analyzer payload: generator engine DLL + all dependencies -->
-	<Target Name="PackAnalyzerDlls" BeforeTargets="_GetPackageFiles">
-		<ItemGroup>
-			<None Include="$(OutputPath)*.dll"
-				  Pack="true"
-				  PackagePath="analyzers/dotnet/fs" />
-		</ItemGroup>
-	</Target>
+	<ItemGroup>
+	  <None Include="$(OutputPath)Serde.FS.SourceGen.dll"
+			Pack="true"
+			PackagePath="analyzers/dotnet/fs" />
+
+	  <None Include="$(OutputPath)Serde.FS.SourceGen.*.dll"
+			Pack="true"
+			PackagePath="analyzers/dotnet/fs" />
+	</ItemGroup>
 
 </Project>
