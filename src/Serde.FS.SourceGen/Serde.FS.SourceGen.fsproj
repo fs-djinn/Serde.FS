@@ -63,5 +63,8 @@
 
 	  <None Include="$(OutputPath)Serde.FS.SourceGen.*.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
 	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Update="FSharp.Core" Version="10.0.103" />
+	</ItemGroup>
 
 </Project>

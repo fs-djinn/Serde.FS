@@ -74,10 +74,10 @@
 	<ItemGroup>
 		<!-- This .targets file contains only <Analyzer> entries.
 			It must be in buildTransitive so downstream projects inherit the analyzers. -->
-		<None Include="buildTransitive\Serde.FS.Json.targets"
-			Pack="true"
-			PackagePath="buildTransitive"
-			Link="buildTransitive\Serde.FS.Json.targets" />
+		<None Include="buildTransitive\Serde.FS.Json.targets" Pack="true" PackagePath="buildTransitive" Link="buildTransitive\Serde.FS.Json.targets" />
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Update="FSharp.Core" Version="10.0.103" />
 	</ItemGroup>
 
 

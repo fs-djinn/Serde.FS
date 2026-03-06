@@ -14,4 +14,8 @@
     <PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="10.0.103" />
+  </ItemGroup>
+
 </Project>
