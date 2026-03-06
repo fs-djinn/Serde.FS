@@ -9,9 +9,6 @@ type Wrapper<'T> = Wrapper of 'T
 [<Serde>]
 type Person = { Name: string }
 
-[<Serde>]
-type PersonWrapper = Wrapper<Person>
-
 let value = Wrapper { Name = "Jordan" }
 
 
@@ -20,9 +17,10 @@ let main argv =
 
     SerdeJson.useAsDefault()
 
-    //let json = Serde.Serialize (Wrapper { Name = "Jordan"})
-    let json = Serde.Serialize<PersonWrapper>(Wrapper { Name = "Jordan"})
-    let person = Serde.Deserialize<PersonWrapper> json
+    //let json = Serde.Serialize<Wrapper<Person>>(Wrapper { Name = "Jordan"})
+    let json = ""
+    //let person = Serde.Deserialize<Wrapper<Person>> json
+    let person = Serde.Deserialize json
 
     printfn "JSON: %s" json
     printfn "Person: %A" person

@@ -151,6 +151,13 @@ module private GenericDiscovery =
             | None -> ()
         acc |> Map.toList |> List.map snd
 
+    /// Scan a list of TypeInfos directly for constructed generics (used for root-level type args).
+    let discoverFromTypeInfos (typeInfos: TypeInfo list) : TypeInfo list =
+        let mutable acc = Map.empty
+        for ti in typeInfos do
+            acc <- collectConstructedGenerics ti acc
+        acc |> Map.toList |> List.map snd
+
     /// Build a SerdeTypeInfo for a constructed generic by instantiating its definition.
     let buildConstructedSerdeTypeInfo (defInfo: SerdeTypeInfo) (constructed: TypeInfo) : SerdeTypeInfo =
         let instantiated = TypeInfo.instantiate defInfo.Raw constructed.GenericArguments
@@ -365,11 +372,12 @@ type SerdeGeneratorTask() =
             let fieldConstructedGenerics = GenericDiscovery.discoverConstructedGenerics resolvedTypes
 
             // Merge root-level constructed generics (from Serde.Serialize<T>/Deserialize<T> calls)
+            // Use recursive discovery to find nested generics (e.g. Wrapper<Wrapper<Person>>)
             let rootConstructed =
                 rootTypeArgs
                 |> Seq.map (FieldTypeResolver.resolveTypeInfo lookup)
-                |> Seq.filter (fun ti -> ti.Kind = ConstructedGenericType)
                 |> Seq.toList
+                |> GenericDiscovery.discoverFromTypeInfos
 
             let constructedGenerics =
                 let mutable acc = fieldConstructedGenerics |> List.map (fun ti -> typeInfoToPascalName ti, ti) |> Map.ofList
@@ -378,13 +386,51 @@ type SerdeGeneratorTask() =
                     if not (acc |> Map.containsKey key) then
                         acc <- acc |> Map.add key ti
                 acc |> Map.toList |> List.map snd
+            // Build set of known Serde type names for type argument validation
+            let knownSerdeTypeNames =
+                resolvedTypes
+                |> Seq.map (fun t ->
+                    let parts =
+                        [ yield! t.Raw.Namespace |> Option.toList
+                          yield! t.Raw.EnclosingModules
+                          yield t.Raw.TypeName ]
+                    String.concat "." parts)
+                |> Set.ofSeq
+
             let constructedSerdeTypes = System.Collections.Generic.List<SerdeTypeInfo>()
             let mutable genericErrors = []
+
+            let rec isSerdeEnabled (ti: TypeInfo) =
+                match ti.Kind with
+                | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> true
+                | Option _ | List _ | Array _ | Set _ | Map _ | Tuple _ -> true
+                | ConstructedGenericType ->
+                    // Valid if the definition exists and all args are Serde-enabled
+                    GenericDiscovery.tryFindDefinition genericDefinitions ti |> Option.isSome
+                    && ti.GenericArguments |> List.forall isSerdeEnabled
+                | Record _ | Union _ | Enum _ | AnonymousRecord _ ->
+                    let fqn =
+                        let parts =
+                            [ yield! ti.Namespace |> Option.toList
+                              yield! ti.EnclosingModules
+                              yield ti.TypeName ]
+                        String.concat "." parts
+                    knownSerdeTypeNames.Contains fqn
+
             for constructed in constructedGenerics do
                 match GenericDiscovery.tryFindDefinition genericDefinitions constructed with
                 | Some defInfo ->
-                    let serdeInfo = GenericDiscovery.buildConstructedSerdeTypeInfo defInfo constructed
-                    constructedSerdeTypes.Add(serdeInfo)
+                    // Validate each type argument is Serde-enabled
+                    let mutable argValid = true
+                    for arg in constructed.GenericArguments do
+                        if not (isSerdeEnabled arg) then
+                            argValid <- false
+                            let fqn = typeInfoToFqFSharpType constructed
+                            let argName = typeInfoToFqFSharpType arg
+                            genericErrors <- (sprintf "Serde.FS error: The generic type '%s' cannot be used with Serde because its type argument '%s' is not Serde-enabled." fqn argName) :: genericErrors
+                    if argValid then
+                        let serdeInfo = GenericDiscovery.buildConstructedSerdeTypeInfo defInfo constructed
+                        constructedSerdeTypes.Add(serdeInfo)
                 | None ->
                     let fqn = typeInfoToFqFSharpType constructed
                     genericErrors <- (sprintf "Serde error: Type '%s' is used in serialization, but '%s' is not marked with [<Serde>]." fqn constructed.TypeName) :: genericErrors
