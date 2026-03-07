@@ -1,0 +1,5 @@
+# Visual Studio Pro cannot resolve NuGet references in .fsx scripts.
+# Suppress false-positive errors from the script analyzer.
+
+[*.fsx]
+dotnet_diagnostic.default.severity = none
