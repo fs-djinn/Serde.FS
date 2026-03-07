@@ -581,8 +581,11 @@ let ``Emits converter for union with nullary case`` () =
     Assert.That(code, Does.Contain("MyUnionConverter"))
     Assert.That(code, Does.Contain("JsonConverter<TestNs.MyUnion>"))
     Assert.That(code, Does.Contain("CreateValueInfo"))
-    Assert.That(code, Does.Contain("""writer.WriteNull("Empty")"""))
-    Assert.That(code, Does.Contain("JsonTokenType.Null"))
+    // Multi-case format (1 case, 0 fields → MultiCaseUnion)
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Empty")"""))
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Fields")"""))
+    Assert.That(code, Does.Contain("writer.WriteStartArray()"))
+    Assert.That(code, Does.Contain("writer.WriteEndArray()"))
     Assert.That(code, Does.Contain("TestNs.MyUnion.Empty"))
     Assert.That(code, Does.Contain("writer.WriteStartObject()"))
     Assert.That(code, Does.Contain("writer.WriteEndObject()"))
@@ -609,13 +612,15 @@ let ``Emits converter for union with tuple case`` () =
     ]
 
     let code = emitter.Emit(info)
+    // Multi-case format (1 case, 2 fields → MultiCaseUnion)
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Pair")"""))
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Fields")"""))
     Assert.That(code, Does.Contain("WriteStartArray"))
     Assert.That(code, Does.Contain("WriteEndArray"))
     Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, e0, options)"))
     Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, e1, options)"))
     Assert.That(code, Does.Contain("JsonSerializer.Deserialize<float>(&reader, options)"))
     Assert.That(code, Does.Contain("TestNs.MyUnion.Pair(e0, e1)"))
-    Assert.That(code, Does.Contain("Expected StartArray for tuple union case"))
 
 [<Test>]
 let ``Emits converter for union with record-like case`` () =
@@ -627,16 +632,17 @@ let ``Emits converter for union with record-like case`` () =
     ]
 
     let code = emitter.Emit(info)
-    // Write: nested object with field property names
-    Assert.That(code, Does.Contain("""writer.WritePropertyName("Person")"""))
-    Assert.That(code, Does.Contain("""writer.WritePropertyName("Name")"""))
-    Assert.That(code, Does.Contain("""writer.WritePropertyName("Age")"""))
-    // Read: mutable bindings and property matching
-    Assert.That(code, Does.Contain("let mutable f0 = Unchecked.defaultof<string>"))
-    Assert.That(code, Does.Contain("let mutable f1 = Unchecked.defaultof<int>"))
-    Assert.That(code, Does.Contain("""if propName = "Name" then"""))
-    Assert.That(code, Does.Contain("""elif propName = "Age" then"""))
-    Assert.That(code, Does.Contain("TestNs.MyUnion.Person(f0, f1)"))
+    // Multi-case format (1 case, 2 named fields → MultiCaseUnion)
+    // Write: Case/Fields with positional array (field names dropped)
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Person")"""))
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Fields")"""))
+    Assert.That(code, Does.Contain("writer.WriteStartArray()"))
+    Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, e0, options)"))
+    Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, e1, options)"))
+    // Read: positional deserialization from Fields array
+    Assert.That(code, Does.Contain("JsonSerializer.Deserialize<string>(&reader, options)"))
+    Assert.That(code, Does.Contain("JsonSerializer.Deserialize<int>(&reader, options)"))
+    Assert.That(code, Does.Contain("TestNs.MyUnion.Person(e0, e1)"))
 
 [<Test>]
 let ``Emits converter for union with renamed case`` () =
@@ -645,8 +651,9 @@ let ``Emits converter for union with renamed case`` () =
     ]
 
     let code = emitter.Emit(info)
-    // JSON uses effective name
-    Assert.That(code, Does.Contain("""writer.WriteNull("Alpha")"""))
+    // Multi-case format (1 case, 0 fields → MultiCaseUnion)
+    // JSON uses effective name in Case property
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Alpha")"""))
     Assert.That(code, Does.Contain("""if caseName = "Alpha" then"""))
     // F# construction uses raw name
     Assert.That(code, Does.Contain("TestNs.MyUnion.A"))
@@ -667,12 +674,15 @@ let ``Emits converter for union with mixed case shapes`` () =
     ]
 
     let code = emitter.Emit(info)
-    // All 4 shapes represented
-    Assert.That(code, Does.Contain("""writer.WriteNull("Point")"""))
+    // Multi-case format: all cases use Case/Fields
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Point")"""))
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Circle")"""))
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Line")"""))
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Rect")"""))
     Assert.That(code, Does.Contain("TestNs.Shape.Circle(v)"))
     Assert.That(code, Does.Contain("TestNs.Shape.Line(e0, e1)"))
     Assert.That(code, Does.Contain("TestNs.Shape.Rect(e0, e1)"))
-    // Read: if/elif chain
+    // Read: if/elif chain on caseName
     Assert.That(code, Does.Contain("""if caseName = "Point" then"""))
     Assert.That(code, Does.Contain("""elif caseName = "Circle" then"""))
     Assert.That(code, Does.Contain("""elif caseName = "Line" then"""))
@@ -686,6 +696,8 @@ let ``Emits converter for union with skipped case`` () =
     ]
 
     let code = emitter.Emit(info)
+    // Multi-case format (2 cases → MultiCaseUnion, classify on ALL cases)
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "A")"""))
     // Skipped case excluded from if/elif chain
     Assert.That(code, Does.Not.Contain("""caseName = "B" then"""))
     // Wildcard covers skipped cases
@@ -728,10 +740,55 @@ type Shape =
     Assert.That(code, Does.Contain("module rec Serde.Generated.Shape"))
     Assert.That(code, Does.Contain("ShapeConverter"))
     Assert.That(code, Does.Contain("JsonConverter<TestApp.Shape>"))
-    Assert.That(code, Does.Contain("""caseName = "Circle" then"""))
-    Assert.That(code, Does.Contain("""caseName = "Point" then"""))
+    // Multi-case format
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Circle")"""))
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Point")"""))
+    Assert.That(code, Does.Contain("""if caseName = "Circle" then"""))
+    Assert.That(code, Does.Contain("""elif caseName = "Point" then"""))
     Assert.That(code, Does.Contain("TestApp.Shape.Circle(v)"))
     Assert.That(code, Does.Contain("TestApp.Shape.Point"))
+    Assert.That(code, Does.Contain("Expected 'Case' property"))
+    Assert.That(code, Does.Contain("Expected 'Fields' property"))
+
+[<Test>]
+let ``Wrapper DU uses wrapper encoding`` () =
+    let info = mkUnionInfo (Some "TestNs") "Box" [
+        mkUnionCase "Box" [ mkField "Value" "int" Int32 ]
+    ]
+
+    let code = emitter.Emit(info)
+    // Wrapper format: { "Box": <payload> }
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Box")"""))
+    Assert.That(code, Does.Contain("JsonSerializer.Serialize(writer, v, options)"))
+    Assert.That(code, Does.Contain("TestNs.Box.Box(v)"))
+    // Should NOT contain Case/Fields format
+    Assert.That(code, Does.Not.Contain("writer.WriteString(\"Case\""))
+    Assert.That(code, Does.Not.Contain("writer.WritePropertyName(\"Fields\")"))
+
+[<Test>]
+let ``Single case with zero fields is MultiCase`` () =
+    let info = mkUnionInfo (Some "TestNs") "Unit" [
+        mkUnionCase "Unit" []
+    ]
+
+    let code = emitter.Emit(info)
+    // 1 case, 0 fields → MultiCaseUnion
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Unit")"""))
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Fields")"""))
+
+[<Test>]
+let ``Single case with multiple fields is MultiCase`` () =
+    let info = mkUnionInfo (Some "TestNs") "Pair" [
+        mkUnionCase "Pair" [
+            mkField "X" "int" Int32
+            mkField "Y" "int" Int32
+        ]
+    ]
+
+    let code = emitter.Emit(info)
+    // 1 case, 2 fields → MultiCaseUnion
+    Assert.That(code, Does.Contain("""writer.WriteString("Case", "Pair")"""))
+    Assert.That(code, Does.Contain("""writer.WritePropertyName("Fields")"""))
 
 // --- Custom converter tests ---
 

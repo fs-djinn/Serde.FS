@@ -283,6 +283,13 @@ module internal JsonCodeEmitterImpl =
             if fields |> List.forall (fun f -> f.RawName = "Item") then TupleFields
             else RecordFields
 
+    type private UnionKind = WrapperUnion | MultiCaseUnion
+
+    let private classifyUnionKind (cases: SerdeUnionCaseInfo list) =
+        match cases with
+        | [single] when single.Fields.Length = 1 -> WrapperUnion
+        | _ -> MultiCaseUnion
+
     let emitUnion (info: SerdeTypeInfo) : string =
         let cases = info.UnionCases |> Option.defaultValue []
         let fqn = emittedFqn info
@@ -304,6 +311,7 @@ module internal JsonCodeEmitterImpl =
 
         let activeCases = cases |> List.filter (fun c -> not c.Attributes.Skip)
         let hasSkippedCases = cases |> List.exists (fun c -> c.Attributes.Skip)
+        let kind = classifyUnionKind cases
 
         let sb = StringBuilder()
         let append (s: string) = sb.AppendLine(s) |> ignore
@@ -321,101 +329,135 @@ module internal JsonCodeEmitterImpl =
         append $"    type internal %s{converterName}() ="
         append $"        inherit JsonConverter<%s{fqn}>()"
 
-        // Read override
-        append "        override _.Read(reader, _typeToConvert, options) ="
-        append "            if reader.TokenType <> JsonTokenType.StartObject then"
-        append "                raise (JsonException(\"Expected StartObject for union\"))"
-        append "            reader.Read() |> ignore"
-        append "            let caseName = reader.GetString()"
-        append "            reader.Read() |> ignore"
+        match kind with
+        | WrapperUnion ->
+            // Wrapper DU: exactly 1 case with exactly 1 field → { "CaseName": <payload> }
+            let case = activeCases.[0]
 
-        for i, case in activeCases |> List.mapi (fun i x -> i, x) do
-            let keyword = if i = 0 then "if" else "elif"
-            let shape = classifyCaseShape case
-            append $"            %s{keyword} caseName = \"%s{case.CaseName}\" then"
-            match shape with
-            | Nullary ->
-                append "                if reader.TokenType <> JsonTokenType.Null then"
-                append "                    raise (JsonException(\"Expected null for nullary union case\"))"
-                append "                reader.Read() |> ignore"
-                append $"                %s{caseFqn}.%s{case.RawCaseName}"
-            | SingleField ->
-                let field = case.Fields.[0]
-                let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                append $"                let v = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
-                append "                reader.Read() |> ignore"
-                append $"                %s{caseFqn}.%s{case.RawCaseName}(v)"
-            | TupleFields ->
-                append "                if reader.TokenType <> JsonTokenType.StartArray then"
-                append "                    raise (JsonException(\"Expected StartArray for tuple union case\"))"
-                for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
+            // Read override
+            append "        override _.Read(reader, _typeToConvert, options) ="
+            append "            if reader.TokenType <> JsonTokenType.StartObject then"
+            append "                raise (JsonException(\"Expected StartObject for union\"))"
+            append "            reader.Read() |> ignore"
+            append "            let caseName = reader.GetString()"
+            append "            reader.Read() |> ignore"
+            append $"            if caseName = \"%s{case.CaseName}\" then"
+            let field = case.Fields.[0]
+            let fsharpType = Types.typeInfoToFqFSharpType field.Type
+            append $"                let v = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
+            append "                reader.Read() |> ignore"
+            append $"                %s{caseFqn}.%s{case.RawCaseName}(v)"
+            append $"            else raise (JsonException($\"Unknown union case: %%s{{caseName}}\"))"
+
+            // Write override
+            append "        override _.Write(writer, value, options) ="
+            append "            writer.WriteStartObject()"
+            append "            match value with"
+            append $"            | %s{caseFqn}.%s{case.RawCaseName}(v) ->"
+            append $"                writer.WritePropertyName(\"%s{case.CaseName}\")"
+            append "                JsonSerializer.Serialize(writer, v, options)"
+            append "            writer.WriteEndObject()"
+
+        | MultiCaseUnion ->
+            // Multi-case DU: { "Case": "CaseName", "Fields": [...] }
+
+            // Read override
+            append "        override _.Read(reader, _typeToConvert, options) ="
+            append "            if reader.TokenType <> JsonTokenType.StartObject then"
+            append "                raise (JsonException(\"Expected StartObject for union\"))"
+            append "            reader.Read() |> ignore"
+            append "            if reader.GetString() <> \"Case\" then"
+            append "                raise (JsonException(\"Expected 'Case' property\"))"
+            append "            reader.Read() |> ignore"
+            append "            let caseName = reader.GetString()"
+            append "            reader.Read() |> ignore"
+            append "            if reader.GetString() <> \"Fields\" then"
+            append "                raise (JsonException(\"Expected 'Fields' property\"))"
+            append "            reader.Read() |> ignore"
+            append "            if reader.TokenType <> JsonTokenType.StartArray then"
+            append "                raise (JsonException(\"Expected StartArray for Fields\"))"
+            append $"            let mutable result = Unchecked.defaultof<%s{fqn}>"
+
+            for i, case in activeCases |> List.mapi (fun i x -> i, x) do
+                let keyword = if i = 0 then "if" else "elif"
+                let shape = classifyCaseShape case
+                append $"            %s{keyword} caseName = \"%s{case.CaseName}\" then"
+                match shape with
+                | Nullary ->
+                    append "                reader.Read() |> ignore"
+                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}"
+                | SingleField ->
+                    let field = case.Fields.[0]
                     let fsharpType = Types.typeInfoToFqFSharpType field.Type
                     append "                reader.Read() |> ignore"
-                    append $"                let e%d{j} = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
-                append "                reader.Read() |> ignore"
-                append "                reader.Read() |> ignore"
-                let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
-                append $"                %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
-            | RecordFields ->
-                append "                if reader.TokenType <> JsonTokenType.StartObject then"
-                append "                    raise (JsonException(\"Expected StartObject for record union case\"))"
-                append "                reader.Read() |> ignore"
-                for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
-                    let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                    append $"                let mutable f%d{j} = Unchecked.defaultof<%s{fsharpType}>"
-                append "                while reader.TokenType <> JsonTokenType.EndObject do"
-                append "                    let propName = reader.GetString()"
-                append "                    reader.Read() |> ignore"
-                for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
-                    let kw = if j = 0 then "if" else "elif"
-                    let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                    append $"                    %s{kw} propName = \"%s{field.Name}\" then"
-                    append $"                        f%d{j} <- JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
-                append "                    else reader.Skip()"
-                append "                    reader.Read() |> ignore"
-                append "                reader.Read() |> ignore"
-                let args = case.Fields |> List.mapi (fun j _ -> $"f%d{j}") |> String.concat ", "
-                append $"                %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
+                    append $"                let v = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
+                    append "                reader.Read() |> ignore"
+                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}(v)"
+                | TupleFields ->
+                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
+                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                        append "                reader.Read() |> ignore"
+                        append $"                let e%d{j} = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
+                    append "                reader.Read() |> ignore"
+                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
+                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
+                | RecordFields ->
+                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
+                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                        append "                reader.Read() |> ignore"
+                        append $"                let e%d{j} = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
+                    append "                reader.Read() |> ignore"
+                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
+                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
 
-        append $"            else raise (JsonException($\"Unknown union case: %%s{{caseName}}\"))"
+            append $"            else raise (JsonException($\"Unknown union case: %%s{{caseName}}\"))"
+            append "            reader.Read() |> ignore"
+            append "            result"
 
-        // Write override
-        append "        override _.Write(writer, value, options) ="
-        append "            writer.WriteStartObject()"
-        append "            match value with"
+            // Write override
+            append "        override _.Write(writer, value, options) ="
+            append "            writer.WriteStartObject()"
+            append "            match value with"
 
-        for case in activeCases do
-            let shape = classifyCaseShape case
-            match shape with
-            | Nullary ->
-                append $"            | %s{caseFqn}.%s{case.RawCaseName} ->"
-                append $"                writer.WriteNull(\"%s{case.CaseName}\")"
-            | SingleField ->
-                append $"            | %s{caseFqn}.%s{case.RawCaseName}(v) ->"
-                append $"                writer.WritePropertyName(\"%s{case.CaseName}\")"
-                append "                JsonSerializer.Serialize(writer, v, options)"
-            | TupleFields ->
-                let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
-                append $"            | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
-                append $"                writer.WritePropertyName(\"%s{case.CaseName}\")"
-                append "                writer.WriteStartArray()"
-                for j in 0 .. case.Fields.Length - 1 do
-                    append $"                JsonSerializer.Serialize(writer, e%d{j}, options)"
-                append "                writer.WriteEndArray()"
-            | RecordFields ->
-                let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
-                append $"            | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
-                append $"                writer.WritePropertyName(\"%s{case.CaseName}\")"
-                append "                writer.WriteStartObject()"
-                for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
-                    append $"                writer.WritePropertyName(\"%s{field.Name}\")"
-                    append $"                JsonSerializer.Serialize(writer, e%d{j}, options)"
-                append "                writer.WriteEndObject()"
+            for case in activeCases do
+                let shape = classifyCaseShape case
+                match shape with
+                | Nullary ->
+                    append $"            | %s{caseFqn}.%s{case.RawCaseName} ->"
+                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
+                    append "                writer.WritePropertyName(\"Fields\")"
+                    append "                writer.WriteStartArray()"
+                    append "                writer.WriteEndArray()"
+                | SingleField ->
+                    append $"            | %s{caseFqn}.%s{case.RawCaseName}(v) ->"
+                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
+                    append "                writer.WritePropertyName(\"Fields\")"
+                    append "                writer.WriteStartArray()"
+                    append "                JsonSerializer.Serialize(writer, v, options)"
+                    append "                writer.WriteEndArray()"
+                | TupleFields ->
+                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
+                    append $"            | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
+                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
+                    append "                writer.WritePropertyName(\"Fields\")"
+                    append "                writer.WriteStartArray()"
+                    for j in 0 .. case.Fields.Length - 1 do
+                        append $"                JsonSerializer.Serialize(writer, e%d{j}, options)"
+                    append "                writer.WriteEndArray()"
+                | RecordFields ->
+                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
+                    append $"            | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
+                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
+                    append "                writer.WritePropertyName(\"Fields\")"
+                    append "                writer.WriteStartArray()"
+                    for j in 0 .. case.Fields.Length - 1 do
+                        append $"                JsonSerializer.Serialize(writer, e%d{j}, options)"
+                    append "                writer.WriteEndArray()"
 
-        if hasSkippedCases then
-            append "            | _ -> raise (JsonException(\"Unknown or skipped union case\"))"
+            if hasSkippedCases then
+                append "            | _ -> raise (JsonException(\"Unknown or skipped union case\"))"
 
-        append "            writer.WriteEndObject()"
+            append "            writer.WriteEndObject()"
 
         append ""
         append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqn}> ="
