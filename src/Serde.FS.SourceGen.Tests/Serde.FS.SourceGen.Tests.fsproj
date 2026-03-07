@@ -29,4 +29,8 @@
 		<ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <PackageReference Update="FSharp.Core" Version="10.0.103" />
+	</ItemGroup>
+
 </Project>

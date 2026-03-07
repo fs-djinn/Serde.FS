@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -12,6 +12,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj" />
     <PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="10.0.103" />
   </ItemGroup>
 
 </Project>

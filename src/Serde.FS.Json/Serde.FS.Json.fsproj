@@ -18,9 +18,7 @@
 
 		<PackageTags>fsharp;serde;json;serialization;source-generator;fs-djinn</PackageTags>
 
-		<!-- Runtime DLLs go to lib/, design-time DLLs go to analyzers/ -->
 		<IncludeBuildOutput>true</IncludeBuildOutput>
-		<IncludeAnalyzer>true</IncludeAnalyzer>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	</PropertyGroup>
 
@@ -48,14 +46,8 @@
 		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
 
 		<!-- Design-time emitter project (never flows to consumers) -->
-		<ProjectReference Include="..\Serde.FS.Json.SourceGen\Serde.FS.Json.SourceGen.fsproj"
-						  PrivateAssets="all" />
+		<ProjectReference Include="..\Serde.FS.Json.SourceGen\Serde.FS.Json.SourceGen.fsproj" PrivateAssets="all" />
 
-		<!-- Generator engine + MSBuild task.
-         PrivateAssets=all ensures consumers do NOT see this dependency. -->
-		<PackageReference Include="Serde.FS.SourceGen"
-						  Version="$(SourceGenVersion)"
-						  PrivateAssets="all" />
 	</ItemGroup>
 
 	<!-- Allow tests to access internal types -->
@@ -63,31 +55,23 @@
 		<InternalsVisibleTo Include="Serde.FS.Json.Tests" />
 	</ItemGroup>
 
-	<!-- Design-time payload: shipped in analyzers/ so MSBuild loads it automatically -->
+	<!-- Console host: publish output goes to tools/net9.0/ -->
 	<ItemGroup>
-		<!-- Generator engine DLLs + dependencies.
-         These MUST be packed so the MSBuild task can load them at build time. -->
-		<None Include="..\Serde.FS.SourceGen\bin\$(Configuration)\net8.0\*.dll"
-			  Pack="true"
-			  PackagePath="analyzers/dotnet/fs" />
-
-		<!-- Backend-specific design-time emitter DLL -->
-		<None Include="..\Serde.FS.Json.SourceGen\bin\$(Configuration)\net8.0\Serde.FS.Json.SourceGen.dll"
-			  Pack="true"
-			  PackagePath="analyzers/dotnet/fs" />
+		<Content Include="..\Serde.FS.GeneratorHost\bin\$(Configuration)\net9.0\publish\**\*"
+				 PackagePath="tools/net9.0/"
+				 CopyToOutputDirectory="Never"
+				 Visible="false" />
 	</ItemGroup>
 
-	<!-- buildTransitive ensures consumers automatically get the generator target -->
+	<!-- buildTransitive ensures consumers automatically get the analyzer declarations -->
 	<ItemGroup>
-		<!-- This .targets file contains:
-         - <UsingTask> for the generator MSBuild task
-         - The target that invokes the generator
-         - Any backend-specific MSBuild logic
-         It MUST be in buildTransitive so downstream projects inherit it. -->
-		<None Include="buildTransitive\Serde.FS.Json.targets"
-			  Pack="true"
-			  PackagePath="buildTransitive"
-			  Link="buildTransitive\Serde.FS.Json.targets" />
+		<!-- This .targets file contains only <Analyzer> entries.
+			It must be in buildTransitive so downstream projects inherit the analyzers. -->
+		<None Include="buildTransitive\Serde.FS.Json.targets" Pack="true" PackagePath="buildTransitive" Link="buildTransitive\Serde.FS.Json.targets" />
 	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Update="FSharp.Core" Version="10.0.103" />
+	</ItemGroup>
+
 
 </Project>

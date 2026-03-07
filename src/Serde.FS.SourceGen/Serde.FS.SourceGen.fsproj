@@ -40,13 +40,12 @@
 		<Compile Include="SerdeAstParser.fs" />
 		<Compile Include="SerdeCodeEmitter.fs" />
 		<Compile Include="RootGenericDiagnostics.fs" />
-		<Compile Include="SerdeGeneratorTask.fs" />
+		<Compile Include="SerdeGeneratorEngine.fs" />
+		<!-- Roslyn ISourceGenerator stub — excluded until F# supports source generators -->
+		<!-- <Compile Include="SerdeSourceGenerator.fs" /> -->
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- MSBuild task base types -->
-		<PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.3.3" />
-
 		<!-- Serde core library (metadata + semantics) -->
 		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
 
@@ -57,18 +56,24 @@
 		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
 	</ItemGroup>
 
-	<!-- MSBuild task registration (UsingTask) -->
+	<!-- Analyzer payload: generator engine DLL + all dependencies -->
 	<ItemGroup>
-		<None Include="build\Serde.FS.SourceGen.targets"
-			  Pack="true"
-			  PackagePath="build" />
+	  <None Include="$(OutputPath)Serde.FS.SourceGen.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
+
+	  <None Include="$(OutputPath)Serde.FS.SourceGen.*.dll" Pack="true" PackagePath="analyzers/dotnet/fs" />
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Update="FSharp.Core" Version="10.0.103" />
 	</ItemGroup>
 
-	<!-- Analyzer payload: generator engine DLL -->
+	<!-- Roslyn Packages — needed when SerdeSourceGenerator.fs is enabled -->
+	<!--
 	<ItemGroup>
-		<None Include="$(OutputPath)Serde.FS.SourceGen.dll"
-			  Pack="true"
-			  PackagePath="analyzers/dotnet/fs" />
+	  <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" PrivateAssets="all" />
+	  <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" PrivateAssets="all" />
+	  <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" PrivateAssets="all" />
 	</ItemGroup>
+	-->
+
 
 </Project>

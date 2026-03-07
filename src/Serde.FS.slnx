@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/Core/">
     <Project Path="Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj" />
+    <Project Path="Serde.FS.GeneratorHost/Serde.FS.GeneratorHost.fsproj" />
     <Project Path="Serde.FS/Serde.FS.fsproj" />
   </Folder>
   <Folder Name="/Json/">

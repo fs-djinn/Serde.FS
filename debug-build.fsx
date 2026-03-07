@@ -8,11 +8,12 @@ open Fun.Build
 // Paths
 // ---------------------------------------------------------------------------
 
-let serdeFSProj   = "src/Serde.FS/Serde.FS.fsproj"
-let sourceGenProj = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
-let stjProj       = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
-let sampleAppProj = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
-let nugetLocalDir = ".nuget-local"
+let serdeFSProj       = "src/Serde.FS/Serde.FS.fsproj"
+let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
+let generatorHostProj = "src/Serde.FS.GeneratorHost/Serde.FS.GeneratorHost.fsproj"
+let stjProj           = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
+let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
+let nugetLocalDir     = ".nuget-local"
 
 // ---------------------------------------------------------------------------
 // Version helpers
@@ -92,6 +93,10 @@ pipeline "debug" {
     }
 
 
+    stage "Publish GeneratorHost" {
+        run $"dotnet publish {generatorHostProj} -c Debug"
+    }
+
     stage "Pack Serde.FS.Json" {
         run $"dotnet restore {stjProj} --no-cache /p:SourceGenVersion={debugVersion}"
         run $"dotnet clean {stjProj}"
@@ -141,6 +146,27 @@ pipeline "debug" {
     }
 
     runIfOnlySpecified false
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline: cli — run GeneratorHost directly against SampleApp for troubleshooting
+// ---------------------------------------------------------------------------
+
+let sampleAppDir = Path.GetDirectoryName(sampleAppProj)
+let cliOutputDir = Path.Combine(sampleAppDir, "obj", "serde-generated")
+
+pipeline "cli" {
+    description "Build and run the GeneratorHost CLI against the SampleApp project"
+
+    stage "Build GeneratorHost" {
+        run $"dotnet build {generatorHostProj} -c Debug"
+    }
+
+    stage "Run GeneratorHost CLI" {
+        run $"dotnet run --project {generatorHostProj} -c Debug -- {sampleAppDir} {cliOutputDir}"
+    }
+
+    runIfOnlySpecified
 }
 
 // ---------------------------------------------------------------------------

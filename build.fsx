@@ -7,10 +7,11 @@ open Fun.Build
 // Paths
 // ---------------------------------------------------------------------------
 
-let serdeFSProj   = "src/Serde.FS/Serde.FS.fsproj"
-let sourceGenProj = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
-let jsonProj      = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
-let buildDir      = ".build"
+let serdeFSProj       = "src/Serde.FS/Serde.FS.fsproj"
+let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
+let generatorHostProj = "src/Serde.FS.GeneratorHost/Serde.FS.GeneratorHost.fsproj"
+let jsonProj          = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
+let buildDir          = ".build"
 
 // ---------------------------------------------------------------------------
 // Version helper
@@ -56,6 +57,10 @@ pipeline "build" {
         run $"dotnet clean {serdeFSProj}"
         run $"dotnet build {serdeFSProj} -c Release /p:PackageVersion={serdeVersion}"
         run $"dotnet pack {serdeFSProj} -c Release -o {buildDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={serdeVersion}"
+    }
+
+    stage "Publish GeneratorHost" {
+        run $"dotnet publish {generatorHostProj} -c Release"
     }
 
     stage "Pack Serde.FS.Json" {
