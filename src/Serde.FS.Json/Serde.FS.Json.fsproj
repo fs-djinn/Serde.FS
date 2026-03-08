@@ -57,7 +57,7 @@
 
 	<!-- Console host: publish output goes to tools/net9.0/ -->
 	<ItemGroup>
-		<Content Include="..\Serde.FS.GeneratorHost\bin\$(Configuration)\net9.0\publish\**\*"
+		<Content Include="..\Serde.FS.Json.GeneratorHost\bin\$(Configuration)\net9.0\publish\**\*"
 				 PackagePath="tools/net9.0/"
 				 CopyToOutputDirectory="Never"
 				 Visible="false" />

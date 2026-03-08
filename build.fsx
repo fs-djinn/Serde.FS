@@ -9,7 +9,7 @@ open Fun.Build
 
 let serdeFSProj       = "src/Serde.FS/Serde.FS.fsproj"
 let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
-let generatorHostProj = "src/Serde.FS.GeneratorHost/Serde.FS.GeneratorHost.fsproj"
+let generatorHostProj = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
 let jsonProj          = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
 let buildDir          = ".build"
 

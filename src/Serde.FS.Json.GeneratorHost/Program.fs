@@ -1,4 +1,4 @@
-module Serde.FS.GeneratorHost.Program
+module Serde.FS.Json.GeneratorHost.Program
 
 open System.IO
 open Serde.FS.SourceGen

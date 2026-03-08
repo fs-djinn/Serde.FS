@@ -10,7 +10,7 @@ open Fun.Build
 
 let serdeFSProj       = "src/Serde.FS/Serde.FS.fsproj"
 let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
-let generatorHostProj = "src/Serde.FS.GeneratorHost/Serde.FS.GeneratorHost.fsproj"
+let generatorHostProj = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
 let stjProj           = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
 let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
 let nugetLocalDir     = ".nuget-local"
