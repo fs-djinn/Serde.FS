@@ -16,21 +16,26 @@ let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsp
 let nugetLocalDir     = ".nuget-local"
 
 // ---------------------------------------------------------------------------
-// Version helpers
+// Version helpers (read from Directory.Build.props)
 // ---------------------------------------------------------------------------
 
-let readVersion (projPath: string) =
-    let content = File.ReadAllText(projPath)
-    let tag = "<Version>"
+let readProp (propName: string) =
+    let content = File.ReadAllText("Directory.Build.props")
+    let tag = $"<{propName}>"
     let idx = content.IndexOf(tag)
-    if idx = -1 then failwith $"No <Version> found in {projPath}"
+    if idx = -1 then failwith $"No <{propName}> found in Directory.Build.props"
     let start = idx + tag.Length
-    let endIdx = content.IndexOf("</Version>", start)
+    let endIdx = content.IndexOf($"</{propName}>", start)
     content.Substring(start, endIdx - start).Trim()
 
-let stableVersion = readVersion serdeFSProj
-let timestamp     = DateTime.UtcNow.ToString("yyyyMMddTHHmmss")
-let debugVersion  = $"{stableVersion}.debug.{timestamp}"
+let stableSerdeFSVersion     = readProp "SerdeFSVersion"
+let stableSourceGenVersion   = readProp "SourceGenVersion"
+let stableSerdeJsonVersion   = readProp "SerdeJsonVersion"
+
+let timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmss")
+
+// All debug packages share the same version
+let debugVersion = $"{stableSerdeFSVersion}.debug.{timestamp}"
 
 // ---------------------------------------------------------------------------
 // Pipeline: debug (default)
@@ -41,9 +46,11 @@ pipeline "debug" {
 
     stage "Show versions" {
         run (fun _ ->
-            printfn $"Stable version: {stableVersion}"
-            printfn $"Timestamp:      {timestamp}"
-            printfn $"Debug version:  {debugVersion}"
+            printfn $"Stable Serde.FS:       {stableSerdeFSVersion}"
+            printfn $"Stable SourceGen:      {stableSourceGenVersion}"
+            printfn $"Stable Serde.FS.Json:  {stableSerdeJsonVersion}"
+            printfn $"Timestamp:             {timestamp}"
+            printfn $"Debug version:         {debugVersion}"
         )
     }
 
@@ -52,7 +59,6 @@ pipeline "debug" {
             if Directory.Exists(nugetLocalDir) then
                 for pkg in Directory.GetFiles(nugetLocalDir, "*.nupkg", SearchOption.AllDirectories) do
                     let name = Path.GetFileName(pkg)
-                    // Only prune Serde debug packages; keep third-party packages (e.g., FSharp.SourceDjinn)
                     if name.StartsWith("Serde.", StringComparison.OrdinalIgnoreCase) then
                         printfn $"  Deleting {pkg}"
                         File.Delete(pkg)
@@ -60,9 +66,9 @@ pipeline "debug" {
                         printfn $"  Keeping  {pkg}"
             else
                 Directory.CreateDirectory(nugetLocalDir) |> ignore
+
             printfn "Local feed pruned."
 
-            // Clear stale debug packages from global NuGet cache
             let globalPkgs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages")
             for pkgName in [ "serde.fs"; "serde.fs.sourcegen"; "serde.fs.json" ] do
                 let pkgDir = Path.Combine(globalPkgs, pkgName)
@@ -74,6 +80,7 @@ pipeline "debug" {
                                 Directory.Delete(versionDir, true)
                             with :? UnauthorizedAccessException ->
                                 printfn $"  Skipped (locked): {versionDir}"
+
             printfn "Global cache debug versions cleared."
         )
     }
@@ -81,17 +88,15 @@ pipeline "debug" {
     stage "Pack Serde.FS.SourceGen" {
         run $"dotnet clean {sourceGenProj}"
         run $"dotnet restore {sourceGenProj} --source https://api.nuget.org/v3/index.json --source {Path.GetFullPath(nugetLocalDir)}"
-        run $"dotnet build {sourceGenProj} -c Debug --no-restore /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
-        run $"dotnet pack {sourceGenProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
+        run $"dotnet build {sourceGenProj} -c Debug --no-restore /p:PackageVersion={debugVersion} /p:SourceGenVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
+        run $"dotnet pack {sourceGenProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SourceGenVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
     }
-
 
     stage "Pack Serde.FS" {
         run $"dotnet clean {serdeFSProj}"
-        run $"dotnet build {serdeFSProj} -c Debug /p:PackageVersion={debugVersion}"
-        run $"dotnet pack {serdeFSProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion}"
+        run $"dotnet build {serdeFSProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
+        run $"dotnet pack {serdeFSProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
     }
-
 
     stage "Publish GeneratorHost" {
         run $"dotnet publish {generatorHostProj} -c Debug"
@@ -101,7 +106,7 @@ pipeline "debug" {
         run $"dotnet restore {stjProj} --no-cache /p:SourceGenVersion={debugVersion}"
         run $"dotnet clean {stjProj}"
         run $"dotnet build {stjProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
-        run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} --no-build /p:NoBuild=true /p:BuildProjectReferences=false /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
+        run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
     }
 
     stage "Write SampleApp version props" {
@@ -137,7 +142,7 @@ pipeline "debug" {
             printfn $"  Packed:"
             printfn $"    Serde.FS                  {debugVersion}"
             printfn $"    Serde.FS.SourceGen        {debugVersion}"
-            printfn $"    Serde.FS.Json              {debugVersion}"
+            printfn $"    Serde.FS.Json             {debugVersion}"
             printfn $"  Restore source:     .nuget-local (--no-cache)"
             printfn $"  SampleApp resolved: {debugVersion}"
             printfn "========================================"
@@ -146,57 +151,6 @@ pipeline "debug" {
     }
 
     runIfOnlySpecified false
-}
-
-// ---------------------------------------------------------------------------
-// Pipeline: cli — run GeneratorHost directly against SampleApp for troubleshooting
-// ---------------------------------------------------------------------------
-
-let sampleAppDir = Path.GetDirectoryName(sampleAppProj)
-let cliOutputDir = Path.Combine(sampleAppDir, "obj", "serde-generated")
-
-pipeline "cli" {
-    description "Build and run the GeneratorHost CLI against the SampleApp project"
-
-    stage "Build GeneratorHost" {
-        run $"dotnet build {generatorHostProj} -c Debug"
-    }
-
-    stage "Run GeneratorHost CLI" {
-        run $"dotnet run --project {generatorHostProj} -c Debug -- {sampleAppDir} {cliOutputDir}"
-    }
-
-    runIfOnlySpecified
-}
-
-// ---------------------------------------------------------------------------
-// Pipeline: clean
-// ---------------------------------------------------------------------------
-
-pipeline "clean" {
-    description "Delete debug packages and SampleApp build artifacts"
-
-    stage "Delete local NuGet packages" {
-        run (fun _ ->
-            if Directory.Exists(nugetLocalDir) then
-                for pkg in Directory.GetFiles(nugetLocalDir, "*.nupkg", SearchOption.AllDirectories) do
-                    printfn $"  Deleting {pkg}"
-                    File.Delete(pkg)
-            printfn "Local feed cleaned."
-        )
-    }
-
-    stage "Delete SampleApp obj/bin" {
-        run (fun _ ->
-            for dir in [ "src/Serde.FS.Json.SampleApp/obj"
-                         "src/Serde.FS.Json.SampleApp/bin" ] do
-                if Directory.Exists(dir) then
-                    printfn $"  Deleting {dir}"
-                    Directory.Delete(dir, true)
-        )
-    }
-
-    runIfOnlySpecified
 }
 
 tryPrintPipelineCommandHelp ()

@@ -6,6 +6,7 @@
 
 		<!-- Serde generator engine + MSBuild task -->
 		<PackageId>Serde.FS.SourceGen</PackageId>
+		<Version>$(SourceGenVersion)</Version>
 		<Authors>Jordan Marr</Authors>
 		<Description>
 			Source generator for Serde.FS. Produces metadata and serializers for [Serde] types with full recursive strictness validation. Used by all Serde.FS backends.
@@ -15,7 +16,6 @@
 		<!-- Packed as an analyzer package (design-time only) -->
 		<IsPackable>true</IsPackable>
 		<IncludeBuildOutput>false</IncludeBuildOutput>
-		<IncludeAnalyzer>true</IncludeAnalyzer>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 
 		<!-- Ensures all referenced DLLs are copied into the output folder
@@ -25,7 +25,6 @@
 		<!-- Local fallback versions.
 			 The debug pipeline supplies real versions via /p:SerdeFSVersion and /p:SourceDjinnVersion. -->
 		<SerdeFSVersion>1.0.0-alpha.1</SerdeFSVersion>
-		<SourceDjinnVersion>0.2.3</SourceDjinnVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -50,7 +49,7 @@
 		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
 
 		<!-- SourceDjinn engine (design-time only) -->
-		<PackageReference Include="FSharp.SourceDjinn" Version="0.2.3" PrivateAssets="all" />
+		<PackageReference Include="FSharp.SourceDjinn" Version="$(SourceDjinnVersion)" PrivateAssets="all" />
 
 		<!-- Runtime type model used by the generator -->
 		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
