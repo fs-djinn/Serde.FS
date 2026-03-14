@@ -13,6 +13,7 @@
     <Compile Include="JsonCodeEmitterTests.fs" />
     <Compile Include="GenericTests.fs" />
     <Compile Include="SerdeTests.fs" />
+    <Compile Include="CodecTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

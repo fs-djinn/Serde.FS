@@ -21,6 +21,15 @@
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	</PropertyGroup>
 
+	<!-- Codec subsystem (additive, self-contained namespace) -->
+	<ItemGroup>
+		<Compile Include="Codec\JsonValue.fs" />
+		<Compile Include="Codec\IJsonEncoder.fs" />
+		<Compile Include="Codec\IJsonDecoder.fs" />
+		<Compile Include="Codec\CodecRegistry.fs" />
+		<Compile Include="Codec\CodecBuilder.fs" />
+	</ItemGroup>
+
 	<!-- Runtime Serde backend implementation -->
 	<ItemGroup>
 		<Compile Include="ISerdeConverter.fs" />
