@@ -16,9 +16,11 @@
 
 	<ItemGroup>
 		<Compile Include="Attributes.fs" />
+		<Compile Include="JsonCodecAttribute.fs" />
 		<Compile Include="ISerdeOptions.fs" />
 		<Compile Include="ISerdeBackend.fs" />
 		<Compile Include="SerdeMissingMetadataException.fs" />
+		<Compile Include="SerdeCodecException.fs" />
 		<Compile Include="SerdeMetadata.fs" />
 		<Compile Include="Serde.fs" />
 	</ItemGroup>

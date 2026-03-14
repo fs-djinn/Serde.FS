@@ -30,6 +30,8 @@
 		<Compile Include="Codec\PrimitiveCodecs.fs" />
 		<Compile Include="Codec\CodecRegistry.fs" />
 		<Compile Include="Codec\CodecBuilder.fs" />
+		<Compile Include="Codec\CodecConverter.fs" />
+		<Compile Include="Codec\JsonTypeInfoBuilder.fs" />
 	</ItemGroup>
 
 	<!-- Runtime Serde backend implementation -->
