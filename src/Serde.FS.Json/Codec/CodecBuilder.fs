@@ -14,7 +14,7 @@ type CodecBuilder =
 
     /// Builds codecs for all given types and returns a populated registry.
     static member BuildAll(types: Type list) : CodecRegistry =
-        let registry = CodecRegistry.WithPrimitives()
+        let mutable registry = CodecRegistry.withPrimitives ()
         for _ty in types do
             // In later specs, this will resolve TypeInfo and call BuildCodec.
             ()

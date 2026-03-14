@@ -3,47 +3,42 @@ namespace Serde.FS.Json.Codec
 open System
 open System.Collections.Generic
 
-/// Stores encoders and decoders keyed by System.Type.
-type CodecRegistry() =
-    let encoders = Dictionary<Type, obj>()
-    let decoders = Dictionary<Type, obj>()
+/// Immutable codec registry that maps types to codecs.
+type CodecRegistry =
+    { Codecs: Dictionary<Type, IJsonCodec> }
 
-    /// Registers an encoder and decoder pair for type 'T.
-    member _.Add<'T>(encoder: IJsonEncoder<'T>, decoder: IJsonDecoder<'T>) =
-        let ty = typeof<'T>
-        encoders[ty] <- box encoder
-        decoders[ty] <- box decoder
+module CodecRegistry =
+    /// Creates an empty registry.
+    let empty : CodecRegistry =
+        { Codecs = Dictionary<Type, IJsonCodec>() }
 
-    /// Retrieves the registered encoder for type 'T, if any.
-    member _.TryGetEncoder<'T>() : IJsonEncoder<'T> option =
-        match encoders.TryGetValue(typeof<'T>) with
-        | true, enc ->
-            match enc with
-            | :? IJsonEncoder<'T> as e -> Some e
-            | _ -> None
+    /// Registers a codec for the given type. Last write wins.
+    let add (ty: Type, codec: IJsonCodec) (registry: CodecRegistry) : CodecRegistry =
+        let newCodecs = Dictionary<Type, IJsonCodec>(registry.Codecs)
+        newCodecs[ty] <- codec
+        { Codecs = newCodecs }
+
+    /// Looks up a codec by type.
+    let tryFind (ty: Type) (registry: CodecRegistry) : IJsonCodec option =
+        match registry.Codecs.TryGetValue(ty) with
+        | true, codec -> Some codec
         | _ -> None
-
-    /// Retrieves the registered decoder for type 'T, if any.
-    member _.TryGetDecoder<'T>() : IJsonDecoder<'T> option =
-        match decoders.TryGetValue(typeof<'T>) with
-        | true, dec ->
-            match dec with
-            | :? IJsonDecoder<'T> as d -> Some d
-            | _ -> None
-        | _ -> None
-
-    /// Creates an empty registry. (CodecBuilder will populate it in later specs.)
-    static member Create(_types: Type list) =
-        CodecRegistry()
 
     /// Creates a registry pre-populated with all primitive codecs.
-    static member WithPrimitives() =
-        let registry = CodecRegistry()
-        registry.Add(PrimitiveCodecs.boolEncoder, PrimitiveCodecs.boolDecoder)
-        registry.Add(PrimitiveCodecs.stringEncoder, PrimitiveCodecs.stringDecoder)
-        registry.Add(PrimitiveCodecs.decimalEncoder, PrimitiveCodecs.decimalDecoder)
-        registry.Add(PrimitiveCodecs.intEncoder, PrimitiveCodecs.intDecoder)
-        registry.Add(PrimitiveCodecs.floatEncoder, PrimitiveCodecs.floatDecoder)
-        registry.Add(PrimitiveCodecs.unitEncoder, PrimitiveCodecs.unitDecoder)
-        registry.Add(PrimitiveCodecs.byteArrayEncoder, PrimitiveCodecs.byteArrayDecoder)
-        registry
+    let withPrimitives () : CodecRegistry =
+        empty
+        |> add (typeof<bool>, PrimitiveCodecs.boolCodec |> JsonCodec.boxCodec)
+        |> add (typeof<string>, PrimitiveCodecs.stringCodec |> JsonCodec.boxCodec)
+        |> add (typeof<decimal>, PrimitiveCodecs.decimalCodec |> JsonCodec.boxCodec)
+        |> add (typeof<int>, PrimitiveCodecs.intCodec |> JsonCodec.boxCodec)
+        |> add (typeof<int64>, PrimitiveCodecs.int64Codec |> JsonCodec.boxCodec)
+        |> add (typeof<float>, PrimitiveCodecs.floatCodec |> JsonCodec.boxCodec)
+        |> add (typeof<unit>, PrimitiveCodecs.unitCodec |> JsonCodec.boxCodec)
+        |> add (typeof<byte[]>, PrimitiveCodecs.byteArrayCodec |> JsonCodec.boxCodec)
+        |> add (typeof<Guid>, PrimitiveCodecs.guidCodec |> JsonCodec.boxCodec)
+        |> add (typeof<DateTime>, PrimitiveCodecs.dateTimeCodec |> JsonCodec.boxCodec)
+        |> add (typeof<DateTimeOffset>, PrimitiveCodecs.dateTimeOffsetCodec |> JsonCodec.boxCodec)
+
+/// Global mutable registry for framework and app-level registration.
+module GlobalCodecRegistry =
+    let mutable Current : CodecRegistry = CodecRegistry.withPrimitives ()
