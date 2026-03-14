@@ -130,6 +130,28 @@ module PrimitiveCodecs =
                 | JsonValue.String s -> DateTimeOffset.Parse(s, null, Globalization.DateTimeStyles.RoundtripKind)
                 | _ -> failwith "Expected JSON string (DateTimeOffset)" }
 
+    let dateOnlyEncoder : IJsonEncoder<DateOnly> =
+        { new IJsonEncoder<DateOnly> with
+            member _.Encode v = JsonValue.String (v.ToString("O")) }
+
+    let dateOnlyDecoder : IJsonDecoder<DateOnly> =
+        { new IJsonDecoder<DateOnly> with
+            member _.Decode json =
+                match json with
+                | JsonValue.String s -> DateOnly.Parse(s, null, Globalization.DateTimeStyles.None)
+                | _ -> failwith "Expected JSON string (DateOnly)" }
+
+    let timeOnlyEncoder : IJsonEncoder<TimeOnly> =
+        { new IJsonEncoder<TimeOnly> with
+            member _.Encode v = JsonValue.String (v.ToString("O")) }
+
+    let timeOnlyDecoder : IJsonDecoder<TimeOnly> =
+        { new IJsonDecoder<TimeOnly> with
+            member _.Decode json =
+                match json with
+                | JsonValue.String s -> TimeOnly.Parse(s, null, Globalization.DateTimeStyles.None)
+                | _ -> failwith "Expected JSON string (TimeOnly)" }
+
     // -- Combined codecs --
 
     let boolCodec = JsonCodec.fromPair boolEncoder boolDecoder
@@ -143,3 +165,5 @@ module PrimitiveCodecs =
     let guidCodec = JsonCodec.fromPair guidEncoder guidDecoder
     let dateTimeCodec = JsonCodec.fromPair dateTimeEncoder dateTimeDecoder
     let dateTimeOffsetCodec = JsonCodec.fromPair dateTimeOffsetEncoder dateTimeOffsetDecoder
+    let dateOnlyCodec = JsonCodec.fromPair dateOnlyEncoder dateOnlyDecoder
+    let timeOnlyCodec = JsonCodec.fromPair timeOnlyEncoder timeOnlyDecoder

@@ -38,6 +38,8 @@ module CodecRegistry =
         |> add (typeof<Guid>, PrimitiveCodecs.guidCodec |> JsonCodec.boxCodec)
         |> add (typeof<DateTime>, PrimitiveCodecs.dateTimeCodec |> JsonCodec.boxCodec)
         |> add (typeof<DateTimeOffset>, PrimitiveCodecs.dateTimeOffsetCodec |> JsonCodec.boxCodec)
+        |> add (typeof<DateOnly>, PrimitiveCodecs.dateOnlyCodec |> JsonCodec.boxCodec)
+        |> add (typeof<TimeOnly>, PrimitiveCodecs.timeOnlyCodec |> JsonCodec.boxCodec)
 
 /// Global mutable registry for framework and app-level registration.
 module GlobalCodecRegistry =

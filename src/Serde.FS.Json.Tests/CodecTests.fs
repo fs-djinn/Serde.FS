@@ -146,6 +146,22 @@ let ``PrimitiveCodecs DateTimeOffset encodes as ISO 8601`` () =
     | String s -> Assert.IsTrue(s.StartsWith("2026-03-14"))
     | _ -> Assert.Fail("Expected JSON string")
 
+[<Test>]
+let ``PrimitiveCodecs DateOnly encodes as ISO 8601`` () =
+    let d = DateOnly(2026, 3, 14)
+    let encoded = PrimitiveCodecs.dateOnlyEncoder.Encode d
+    match encoded with
+    | String s -> Assert.AreEqual("2026-03-14", s)
+    | _ -> Assert.Fail("Expected JSON string")
+
+[<Test>]
+let ``PrimitiveCodecs TimeOnly encodes as ISO 8601`` () =
+    let t = TimeOnly(10, 30, 0)
+    let encoded = PrimitiveCodecs.timeOnlyEncoder.Encode t
+    match encoded with
+    | String s -> Assert.IsTrue(s.StartsWith("10:30:00"))
+    | _ -> Assert.Fail("Expected JSON string")
+
 // -- Primitive codec round-trip tests --
 
 [<Test>]
@@ -205,6 +221,16 @@ let ``PrimitiveCodecs DateTimeOffset round-trips`` () =
     let v = DateTimeOffset(2026, 3, 14, 10, 30, 0, TimeSpan.Zero)
     Assert.AreEqual(v, PrimitiveCodecs.dateTimeOffsetDecoder.Decode(PrimitiveCodecs.dateTimeOffsetEncoder.Encode v))
 
+[<Test>]
+let ``PrimitiveCodecs DateOnly round-trips`` () =
+    let v = DateOnly(2026, 3, 14)
+    Assert.AreEqual(v, PrimitiveCodecs.dateOnlyDecoder.Decode(PrimitiveCodecs.dateOnlyEncoder.Encode v))
+
+[<Test>]
+let ``PrimitiveCodecs TimeOnly round-trips`` () =
+    let v = TimeOnly(10, 30, 45, 123)
+    Assert.AreEqual(v, PrimitiveCodecs.timeOnlyDecoder.Decode(PrimitiveCodecs.timeOnlyEncoder.Encode v))
+
 // -- CodecRegistry.withPrimitives tests --
 
 [<Test>]
@@ -221,6 +247,8 @@ let ``withPrimitives registers all primitive codecs`` () =
     Assert.IsTrue((CodecRegistry.tryFind typeof<Guid> registry).IsSome)
     Assert.IsTrue((CodecRegistry.tryFind typeof<DateTime> registry).IsSome)
     Assert.IsTrue((CodecRegistry.tryFind typeof<DateTimeOffset> registry).IsSome)
+    Assert.IsTrue((CodecRegistry.tryFind typeof<DateOnly> registry).IsSome)
+    Assert.IsTrue((CodecRegistry.tryFind typeof<TimeOnly> registry).IsSome)
 
 [<Test>]
 let ``withPrimitives returns None for unregistered types`` () =
