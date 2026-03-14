@@ -13,6 +13,8 @@ let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
 let generatorHostProj = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
 let stjProj           = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
 let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
+let sourceGenTestProj = "src/Serde.FS.SourceGen.Tests/Serde.FS.SourceGen.Tests.fsproj"
+let jsonTestProj      = "src/Serde.FS.Json.Tests/Serde.FS.Json.Tests.fsproj"
 let nugetLocalDir     = ".nuget-local"
 
 // ---------------------------------------------------------------------------
@@ -107,6 +109,11 @@ pipeline "debug" {
         run $"dotnet clean {stjProj}"
         run $"dotnet build {stjProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
         run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
+    }
+
+    stage "Run tests" {
+        run $"dotnet test {sourceGenTestProj} -c Debug --no-restore"
+        run $"dotnet test {jsonTestProj} -c Debug --no-restore"
     }
 
     stage "Write SampleApp version props" {
