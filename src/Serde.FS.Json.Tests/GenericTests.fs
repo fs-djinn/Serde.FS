@@ -15,7 +15,7 @@ let private mkPrimType name kind : TypeInfo =
       GenericParameters = []; GenericArguments = [] }
 
 let private mkField name typeName kind : SerdeFieldInfo =
-    { Name = name; RawName = name; Type = mkPrimType typeName kind; Attributes = SerdeAttributes.empty; Capability = Both }
+    { Name = name; RawName = name; Type = mkPrimType typeName kind; Attributes = SerdeAttributes.empty; Capability = Both; CodecType = None }
 
 /// Build a generic union definition: Wrapper<'T> = Wrapper of 'T
 let private mkWrapperDef ns : SerdeTypeInfo =
@@ -117,6 +117,7 @@ let ``EmitResolver includes constructed generic types`` () =
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
+        CodecType = None
         Fields = Some [ mkField "Name" "string" String ]
         UnionCases = None
         EnumCases = None

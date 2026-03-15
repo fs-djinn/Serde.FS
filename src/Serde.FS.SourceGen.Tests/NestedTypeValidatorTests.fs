@@ -21,7 +21,7 @@ let private mkEnumRef ns modules name : TypeInfo =
     mkTypeInfo ns modules name (Enum [])
 
 let private mkField name ty : SerdeFieldInfo =
-    { Name = name; RawName = name; Type = ty; Attributes = SerdeAttributes.empty; Capability = Both }
+    { Name = name; RawName = name; Type = ty; Attributes = SerdeAttributes.empty; Capability = Both; CodecType = None }
 
 let private mkUnionCase caseName fields : SerdeUnionCaseInfo =
     { CaseName = caseName; RawCaseName = caseName; Fields = fields; Tag = None; Attributes = SerdeAttributes.empty }
@@ -32,6 +32,7 @@ let private mkSerdeType ns modules name fields unionCases : SerdeTypeInfo =
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
+        CodecType = None
         Fields = fields
         UnionCases = unionCases
         EnumCases = None
@@ -55,6 +56,7 @@ let ``Union case with unmarked record payload produces error`` () =
           Capability = Both
           Attributes = SerdeAttributes.empty
           ConverterType = None
+          CodecType = None
           Fields = None
           UnionCases = Some [ mkUnionCase "Dog" [ mkField "Item" nameTi ] ]
           EnumCases = None

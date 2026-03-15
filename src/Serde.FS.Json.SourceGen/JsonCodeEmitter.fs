@@ -180,6 +180,17 @@ module internal JsonCodeEmitterImpl =
         append "                )"
         append "            )"
         append "        )"
+
+        // Apply field-level codec overrides
+        let fieldsWithCodecs = fields |> List.indexed |> List.filter (fun (_, f) -> f.CodecType.IsSome)
+        if not fieldsWithCodecs.IsEmpty then
+            for (i, field) in fieldsWithCodecs do
+                let codecFqn = field.CodecType.Value
+                let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                append $"        let fieldCodec_%d{i} = %s{codecFqn}() :> Serde.FS.Json.Codec.IJsonCodec<%s{fsharpType}>"
+                append $"        let fieldCodecBoxed_%d{i} = Serde.FS.Json.Codec.JsonCodec.boxCodec fieldCodec_%d{i}"
+                append $"        info.Properties.[%d{i}].CustomConverter <- Serde.FS.Json.Codec.UntypedCodecConverter(fieldCodecBoxed_%d{i})"
+
         append "        info"
 
         sb.ToString()
@@ -511,10 +522,9 @@ module internal JsonCodeEmitterImpl =
 
         sb.ToString()
 
-    let emitCustom (info: SerdeTypeInfo) (converterFqn: string) : string =
+    let emitCodec (info: SerdeTypeInfo) (codecFqn: string) : string =
         let fqn = emittedFqn info
         let pascalName = emittedName info
-        let converterName = pascalName + "Converter"
         let fnName = lowerFirst pascalName + "JsonTypeInfo"
 
         let sb = StringBuilder()
@@ -524,31 +534,21 @@ module internal JsonCodeEmitterImpl =
         append $"module rec Serde.Generated.%s{pascalName}"
         append ""
         append "open System.Text.Json"
-        append "open System.Text.Json.Serialization"
         append "open System.Text.Json.Serialization.Metadata"
         append ""
         append "[<AutoOpen>]"
         append $"module internal %s{pascalName}SerdeTypeInfo ="
         append ""
-        append $"    type internal %s{converterName}() ="
-        append $"        inherit JsonConverter<%s{fqn}>()"
-        append "        override _.Read(reader, _typeToConvert, options) ="
-        append "            let node = JsonSerializer.Deserialize<System.Text.Json.Nodes.JsonNode>(&reader, options)"
-        append $"            let c = %s{converterFqn}()"
-        append $"            (c :> Serde.FS.Json.ISerdeConverter<%s{fqn}>).Deserialize(node)"
-        append "        override _.Write(writer, value, options) ="
-        append $"            let c = %s{converterFqn}()"
-        append $"            let node = (c :> Serde.FS.Json.ISerdeConverter<%s{fqn}>).Serialize(value)"
-        append "            node.WriteTo(writer)"
-        append ""
         append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqn}> ="
-        append $"        JsonMetadataServices.CreateValueInfo<%s{fqn}>(options, %s{converterName}())"
+        append $"        let codec = %s{codecFqn}() :> Serde.FS.Json.Codec.IJsonCodec<%s{fqn}>"
+        append $"        let converter = Serde.FS.Json.Codec.CodecConverter<%s{fqn}>(codec)"
+        append $"        JsonMetadataServices.CreateValueInfo<%s{fqn}>(options, converter)"
 
         sb.ToString()
 
     let emit (info: SerdeTypeInfo) : string =
-        match info.ConverterType with
-        | Some converterFqn -> emitCustom info converterFqn
+        match info.CodecType with
+        | Some codecFqn -> emitCodec info codecFqn
         | None ->
             match info.Raw.Kind with
             | Types.Option _ -> emitOption info

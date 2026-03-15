@@ -16,11 +16,11 @@ let private mkPrimType name kind : TypeInfo =
 
 /// Helper to build a SerdeFieldInfo from a name and a simple primitive type.
 let private mkField name typeName kind : SerdeFieldInfo =
-    { Name = name; RawName = name; Type = mkPrimType typeName kind; Attributes = SerdeAttributes.empty; Capability = Both }
+    { Name = name; RawName = name; Type = mkPrimType typeName kind; Attributes = SerdeAttributes.empty; Capability = Both; CodecType = None }
 
 /// Helper to build a SerdeFieldInfo with a full TypeInfo.
 let private mkFieldWithType name (typeInfo: TypeInfo) : SerdeFieldInfo =
-    { Name = name; RawName = name; Type = typeInfo; Attributes = SerdeAttributes.empty; Capability = Both }
+    { Name = name; RawName = name; Type = typeInfo; Attributes = SerdeAttributes.empty; Capability = Both; CodecType = None }
 
 /// Helper to build an option TypeInfo wrapping an inner TypeInfo.
 let private mkOptionType (inner: TypeInfo) : TypeInfo =
@@ -34,6 +34,7 @@ let private mkOptionInfo (inner: TypeInfo) : SerdeTypeInfo =
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
+        CodecType = None
         Fields = None
         UnionCases = None
         EnumCases = None
@@ -57,6 +58,7 @@ let private mkRecordInfo ns typeName cap (fields: SerdeFieldInfo list) : SerdeTy
         Capability = cap
         Attributes = SerdeAttributes.empty
         ConverterType = None
+        CodecType = None
         Fields = Some fields
         UnionCases = None
         EnumCases = None
@@ -333,6 +335,7 @@ let private mkTupleInfo (elements: TypeInfo list) : SerdeTypeInfo =
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
+        CodecType = None
         Fields = None
         UnionCases = None
         EnumCases = None
@@ -437,6 +440,7 @@ let private mkEnumInfo ns typeName (cases: SerdeEnumCaseInfo list) : SerdeTypeIn
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
+        CodecType = None
         Fields = None
         UnionCases = None
         EnumCases = Some cases
@@ -541,7 +545,7 @@ let private mkUnionCaseSkipped name (fields: SerdeFieldInfo list) : SerdeUnionCa
 
 /// Helper to build an unnamed (tuple-like) field for a union case.
 let private mkUnnamedField (typeInfo: TypeInfo) : SerdeFieldInfo =
-    { Name = "Item"; RawName = "Item"; Type = typeInfo; Attributes = SerdeAttributes.empty; Capability = Both }
+    { Name = "Item"; RawName = "Item"; Type = typeInfo; Attributes = SerdeAttributes.empty; Capability = Both; CodecType = None }
 
 /// Helper to build a SerdeTypeInfo for a union type.
 let private mkUnionInfo ns typeName (cases: SerdeUnionCaseInfo list) : SerdeTypeInfo =
@@ -564,6 +568,7 @@ let private mkUnionInfo ns typeName (cases: SerdeUnionCaseInfo list) : SerdeType
         Capability = Both
         Attributes = SerdeAttributes.empty
         ConverterType = None
+        CodecType = None
         Fields = None
         UnionCases = Some cases
         EnumCases = None
@@ -790,10 +795,10 @@ let ``Single case with multiple fields is MultiCase`` () =
     Assert.That(code, Does.Contain("""writer.WriteString("Case", "Pair")"""))
     Assert.That(code, Does.Contain("""writer.WritePropertyName("Fields")"""))
 
-// --- Custom converter tests ---
+// --- Codec attribute tests ---
 
-/// Helper to build a SerdeTypeInfo with a custom converter.
-let private mkCustomInfo ns typeName converterFqn : SerdeTypeInfo =
+/// Helper to build a SerdeTypeInfo with a type-level codec.
+let private mkCodecInfo ns typeName codecFqn : SerdeTypeInfo =
     let rawField : Types.FieldInfo =
         { Name = "Value"; Type = mkPrimType "string" String; Attributes = [] }
     {
@@ -808,7 +813,8 @@ let private mkCustomInfo ns typeName converterFqn : SerdeTypeInfo =
         }
         Capability = Both
         Attributes = SerdeAttributes.empty
-        ConverterType = Some converterFqn
+        ConverterType = None
+        CodecType = Some codecFqn
         Fields = Some [
             mkField "Value" "string" String
         ]
@@ -818,20 +824,41 @@ let private mkCustomInfo ns typeName converterFqn : SerdeTypeInfo =
     }
 
 [<Test>]
-let ``Emits converter for type with custom converter`` () =
-    let info = mkCustomInfo (Some "TestNs") "FancyName" "TestNs.MyConverter"
+let ``Emits codec for type with Codec attribute`` () =
+    let info = mkCodecInfo (Some "TestNs") "FancyName" "TestNs.MyCodec"
     let code = emitter.Emit(info)
     Assert.That(code, Does.Contain("module rec Serde.Generated.FancyName"))
-    Assert.That(code, Does.Contain("FancyNameConverter"))
-    Assert.That(code, Does.Contain("JsonConverter<TestNs.FancyName>"))
-    Assert.That(code, Does.Contain("MyConverter()"))
-    Assert.That(code, Does.Contain("ISerdeConverter<TestNs.FancyName>"))
+    Assert.That(code, Does.Contain("fancyNameJsonTypeInfo"))
+    Assert.That(code, Does.Contain("JsonTypeInfo<TestNs.FancyName>"))
+    Assert.That(code, Does.Contain("MyCodec()"))
+    Assert.That(code, Does.Contain("IJsonCodec<TestNs.FancyName>"))
+    Assert.That(code, Does.Contain("CodecConverter<TestNs.FancyName>"))
     Assert.That(code, Does.Contain("CreateValueInfo"))
-    Assert.That(code, Does.Contain("WriteTo"))
-    Assert.That(code, Does.Contain("Deserialize<System.Text.Json.Nodes.JsonNode>"))
 
 [<Test>]
-let ``Full pipeline: parse then emit custom converter`` () =
+let ``Full pipeline: parse then emit codec`` () =
+    let source = """
+namespace TestApp
+
+type MyCodec() = class end
+
+[<Serde(Codec = typeof<MyCodec>)>]
+type FancyName = { Value: string }
+"""
+    let types = Serde.FS.SourceGen.SerdeAstParser.parseSource "/test.fs" source
+    Assert.That(types.Length, Is.EqualTo(1))
+    Assert.That(types.[0].CodecType, Is.EqualTo(Some "MyCodec"))
+
+    let code = emitter.Emit(types.[0])
+    Assert.That(code, Does.Contain("module rec Serde.Generated.FancyName"))
+    Assert.That(code, Does.Contain("fancyNameJsonTypeInfo"))
+    Assert.That(code, Does.Contain("IJsonCodec<TestApp.FancyName>"))
+    Assert.That(code, Does.Contain("MyCodec()"))
+    Assert.That(code, Does.Contain("CodecConverter<TestApp.FancyName>"))
+    Assert.That(code, Does.Contain("CreateValueInfo"))
+
+[<Test>]
+let ``Converter attribute is still parsed but ignored by emitter`` () =
     let source = """
 namespace TestApp
 
@@ -842,12 +869,10 @@ type FancyName = { Value: string }
 """
     let types = Serde.FS.SourceGen.SerdeAstParser.parseSource "/test.fs" source
     Assert.That(types.Length, Is.EqualTo(1))
+    // ConverterType is still parsed for backwards compat
     Assert.That(types.[0].ConverterType, Is.EqualTo(Some "MyConverter"))
-
+    // But CodecType is None, so emitter falls through to regular record emission
+    Assert.That(types.[0].CodecType, Is.EqualTo(None))
     let code = emitter.Emit(types.[0])
-    Assert.That(code, Does.Contain("module rec Serde.Generated.FancyName"))
-    Assert.That(code, Does.Contain("FancyNameConverter"))
-    Assert.That(code, Does.Contain("ISerdeConverter<TestApp.FancyName>"))
-    Assert.That(code, Does.Contain("MyConverter()"))
-    Assert.That(code, Does.Contain("WriteTo"))
-    Assert.That(code, Does.Contain("Deserialize<System.Text.Json.Nodes.JsonNode>"))
+    // Should emit as a normal record, not a custom converter
+    Assert.That(code, Does.Contain("JsonMetadataServices.CreateObjectInfo<TestApp.FancyName>"))

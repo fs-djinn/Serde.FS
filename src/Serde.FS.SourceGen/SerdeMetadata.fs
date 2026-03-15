@@ -29,6 +29,7 @@ type SerdeFieldInfo = {
     Type: TypeInfo
     Attributes: SerdeAttributes
     Capability: SerdeCapability
+    CodecType: string option
 }
 
 type SerdeEnumCaseInfo = {
@@ -58,6 +59,7 @@ type SerdeTypeInfo = {
     Capability: SerdeCapability
     Attributes: SerdeAttributes
     ConverterType: string option
+    CodecType: string option
     Fields: SerdeFieldInfo list option
     UnionCases: SerdeUnionCaseInfo list option
     EnumCases: SerdeEnumCaseInfo list option
@@ -116,15 +118,31 @@ module SerdeMetadataBuilder =
             | Serialize -> Serialize
         else typeCap
 
+    let private extractCodecType (attrs: AttributeInfo list) : string option =
+        attrs |> List.tryPick (fun a ->
+            let sn = shortName a.Name
+            if sn = "SerdeField" || sn = "SerdeFieldAttribute" then
+                a.NamedArgs |> List.tryPick (fun (name, value) ->
+                    if name = "Codec" then
+                        match value with
+                        | :? TypeKindExtractor.AttrArgValue as av ->
+                            let (TypeKindExtractor.AttrArgValue.TypeOf fqn) = av
+                            Some fqn
+                        | _ -> None
+                    else None)
+            else None)
+
     let private buildSerdeFieldInfo (typeCap: SerdeCapability) (fi: FieldInfo) : SerdeFieldInfo =
         let attrs = buildSerdeAttributes fi.Attributes
         let effectiveName = attrs.Rename |> Option.defaultValue fi.Name
+        let codecType = extractCodecType fi.Attributes
         {
             Name = effectiveName
             RawName = fi.Name
             Type = fi.Type
             Attributes = attrs
             Capability = resolveFieldCapability typeCap attrs
+            CodecType = codecType
         }
 
     let private buildSerdeUnionCaseInfo (typeCap: SerdeCapability) (uc: UnionCase) : SerdeUnionCaseInfo =
@@ -149,22 +167,25 @@ module SerdeMetadataBuilder =
             Capability = resolveFieldCapability typeCap attrs
         }
 
+    let private extractSerdeNamedArg (argName: string) (attrs: AttributeInfo list) : string option =
+        attrs |> List.tryPick (fun a ->
+            let sn = shortName a.Name
+            if sn = "Serde" || sn = "SerdeAttribute" then
+                a.NamedArgs |> List.tryPick (fun (name, value) ->
+                    if name = argName then
+                        match value with
+                        | :? TypeKindExtractor.AttrArgValue as av ->
+                            let (TypeKindExtractor.AttrArgValue.TypeOf fqn) = av
+                            Some fqn
+                        | _ -> None
+                    else None)
+            else None)
+
     let buildSerdeTypeInfo (ti: TypeInfo) : SerdeTypeInfo =
         let capability = resolveCapability ti.Attributes
         let typeAttrs = buildSerdeAttributes ti.Attributes
-        let converterType =
-            ti.Attributes |> List.tryPick (fun a ->
-                let sn = shortName a.Name
-                if sn = "Serde" || sn = "SerdeAttribute" then
-                    a.NamedArgs |> List.tryPick (fun (name, value) ->
-                        if name = "Converter" then
-                            match value with
-                            | :? TypeKindExtractor.AttrArgValue as av ->
-                                let (TypeKindExtractor.AttrArgValue.TypeOf fqn) = av
-                                Some fqn
-                            | _ -> None
-                        else None)
-                else None)
+        let converterType = extractSerdeNamedArg "Converter" ti.Attributes
+        let codecType = extractSerdeNamedArg "Codec" ti.Attributes
         let fields, unionCases, enumCases =
             match ti.Kind with
             | Record fields | AnonymousRecord fields ->
@@ -180,6 +201,7 @@ module SerdeMetadataBuilder =
             Capability = capability
             Attributes = typeAttrs
             ConverterType = converterType
+            CodecType = codecType
             Fields = fields
             UnionCases = unionCases
             EnumCases = enumCases

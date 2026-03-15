@@ -42,6 +42,7 @@ module private OptionDiscovery =
             Capability = Both
             Attributes = SerdeAttributes.empty
             ConverterType = None
+            CodecType = None
             Fields = None
             UnionCases = None
             EnumCases = None
@@ -84,6 +85,7 @@ module private TupleDiscovery =
             Capability = Both
             Attributes = SerdeAttributes.empty
             ConverterType = None
+            CodecType = None
             Fields = None
             UnionCases = None
             EnumCases = None
@@ -304,27 +306,44 @@ module SerdeGeneratorEngine =
             allTypeInfos
             |> Seq.map (fun t -> t.TypeName, t)
             |> Map.ofSeq
+        let resolveTypeName (sti: SerdeTypeInfo) (name: string) : string =
+            match Map.tryFind name lookup with
+            | Some ti ->
+                [ yield! ti.Namespace |> Option.toList
+                  yield! ti.EnclosingModules
+                  yield ti.TypeName ]
+                |> String.concat "."
+            | None ->
+                let prefix =
+                    [ yield! sti.Raw.Namespace |> Option.toList
+                      yield! sti.Raw.EnclosingModules ]
+                if prefix.IsEmpty then name
+                else String.concat "." (prefix @ [name])
+
+        let resolveFieldCodecTypes (sti: SerdeTypeInfo) : SerdeTypeInfo =
+            match sti.Fields with
+            | Some fields ->
+                let resolvedFields =
+                    fields |> List.map (fun f ->
+                        match f.CodecType with
+                        | Some name -> { f with CodecType = Some (resolveTypeName sti name) }
+                        | None -> f)
+                { sti with Fields = Some resolvedFields }
+            | None -> sti
+
         let resolvedTypes =
             parsedTypes
             |> Seq.map (FieldTypeResolver.resolveSerdeTypeInfo lookup)
             |> Seq.map (fun sti ->
-                match sti.ConverterType with
-                | Some name ->
-                    match Map.tryFind name lookup with
-                    | Some ti ->
-                        let fqn =
-                            [ yield! ti.Namespace |> Option.toList
-                              yield! ti.EnclosingModules
-                              yield ti.TypeName ]
-                            |> String.concat "."
-                        { sti with ConverterType = Some fqn }
-                    | None ->
-                        let prefix =
-                            [ yield! sti.Raw.Namespace |> Option.toList
-                              yield! sti.Raw.EnclosingModules ]
-                        if prefix.IsEmpty then sti
-                        else { sti with ConverterType = Some (String.concat "." (prefix @ [name])) }
-                | None -> sti)
+                let sti =
+                    match sti.ConverterType with
+                    | Some name -> { sti with ConverterType = Some (resolveTypeName sti name) }
+                    | None -> sti
+                let sti =
+                    match sti.CodecType with
+                    | Some name -> { sti with CodecType = Some (resolveTypeName sti name) }
+                    | None -> sti
+                resolveFieldCodecTypes sti)
             |> Seq.toList
 
         // Phase 2.1: Detect root-level constructed generics without explicit type args

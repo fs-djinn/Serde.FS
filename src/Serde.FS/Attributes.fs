@@ -6,7 +6,9 @@ open System
 [<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Struct ||| AttributeTargets.Interface ||| AttributeTargets.Enum, AllowMultiple = false)>]
 type SerdeAttribute() =
     inherit Attribute()
+    [<Obsolete("System.Text.Json converters are no longer supported. Use Serde(Codec = typeof<MyCodec>) instead.")>]
     member val Converter : obj = null with get, set
+    member val Codec : Type = null with get, set
 
 /// Marks a type for serialization code generation only.
 [<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Struct ||| AttributeTargets.Interface ||| AttributeTargets.Enum, AllowMultiple = false)>]
@@ -33,3 +35,9 @@ type SerdeSkipSerializeAttribute() = inherit Attribute()
 /// Skips the target element for deserialization only.
 [<AttributeUsage(AttributeTargets.All, AllowMultiple = false)>]
 type SerdeSkipDeserializeAttribute() = inherit Attribute()
+
+/// Specifies field-level codec overrides for serialization and deserialization.
+[<AttributeUsage(AttributeTargets.Field ||| AttributeTargets.Property, AllowMultiple = false)>]
+type SerdeFieldAttribute() =
+    inherit Attribute()
+    member val Codec : Type = null with get, set
