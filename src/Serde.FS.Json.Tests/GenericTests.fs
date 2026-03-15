@@ -50,21 +50,19 @@ let private mkConstructedWrapperPerson ns =
         } }
 
 [<Test>]
-let ``Emits converter for generic union Wrapper of Person`` () =
+let ``Emits codec for generic union Wrapper of Person`` () =
     let info = mkConstructedWrapperPerson (Some "MyApp")
     let code = emitter.Emit(info)
     // Module and type names use underscore separation
     Assert.That(code, Does.Contain("module rec Serde.Generated.Wrapper_Person"))
-    Assert.That(code, Does.Contain("Wrapper_PersonConverter"))
-    Assert.That(code, Does.Contain("wrapper_PersonJsonTypeInfo"))
-    // The typeof and converter type use the constructed generic FQN
-    Assert.That(code, Does.Contain("JsonConverter<MyApp.Wrapper<MyApp.Person>>"))
-    Assert.That(code, Does.Contain("CreateValueInfo"))
+    Assert.That(code, Does.Contain("wrapper_PersonJsonCodec"))
+    // The typeof and codec type use the constructed generic FQN
+    Assert.That(code, Does.Contain("IJsonCodec<MyApp.Wrapper<MyApp.Person>>"))
     // Case construction qualifies with namespace only (not the generic type)
-    Assert.That(code, Does.Contain("MyApp.Wrapper(v)"))
+    Assert.That(code, Does.Contain("MyApp.Wrapper("))
 
 [<Test>]
-let ``Emits converter for nested generic Wrapper of Wrapper of Person`` () =
+let ``Emits codec for nested generic Wrapper of Wrapper of Person`` () =
     let ns = Some "MyApp"
     let wrapperDef = mkWrapperDef ns
     let personTi = mkPersonTi ns
@@ -83,7 +81,6 @@ let ``Emits converter for nested generic Wrapper of Wrapper of Person`` () =
                     } }
     let code = emitter.Emit(info)
     Assert.That(code, Does.Contain("module rec Serde.Generated.Wrapper_WrapperPerson"))
-    Assert.That(code, Does.Contain("Wrapper_WrapperPersonConverter"))
 
 [<Test>]
 let ``Generic record Box of int emits correct code`` () =
@@ -106,9 +103,9 @@ let ``Generic record Box of int emits correct code`` () =
                     } }
     let code = emitter.Emit(info)
     Assert.That(code, Does.Contain("module rec Serde.Generated.Box_Int"))
-    Assert.That(code, Does.Contain("box_IntJsonTypeInfo"))
-    Assert.That(code, Does.Contain("JsonTypeInfo<MyApp.Box<int>>"))
-    Assert.That(code, Does.Contain("JsonMetadataServices.CreateObjectInfo<MyApp.Box<int>>"))
+    Assert.That(code, Does.Contain("box_IntJsonCodec"))
+    Assert.That(code, Does.Contain("IJsonCodec<MyApp.Box<int>>"))
+    Assert.That(code, Does.Contain("JsonValue.Object"))
 
 [<Test>]
 let ``EmitResolver includes constructed generic types`` () =
@@ -131,4 +128,4 @@ let ``EmitResolver includes constructed generic types`` () =
     let code = result.Value
     Assert.That(code, Does.Contain("open Serde.Generated.Wrapper_Person"))
     Assert.That(code, Does.Contain("typeof<MyApp.Wrapper<MyApp.Person>>"))
-    Assert.That(code, Does.Contain("wrapper_PersonJsonTypeInfo"))
+    Assert.That(code, Does.Contain("wrapper_PersonJsonCodec"))

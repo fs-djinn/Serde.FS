@@ -30,16 +30,12 @@
 		<Compile Include="Codec\PrimitiveCodecs.fs" />
 		<Compile Include="Codec\CodecRegistry.fs" />
 		<Compile Include="Codec\CodecResolver.fs" />
-		<Compile Include="Codec\CodecBuilder.fs" />
 		<Compile Include="Codec\SerdeJsonWriter.fs" />
 		<Compile Include="Codec\SerdeJsonReader.fs" />
-		<Compile Include="Codec\CodecConverter.fs" />
-		<Compile Include="Codec\JsonTypeInfoBuilder.fs" />
 	</ItemGroup>
 
 	<!-- Runtime Serde backend implementation -->
 	<ItemGroup>
-		<Compile Include="ISerdeConverter.fs" />
 		<Compile Include="ResolverBootstrap.fs" />
 		<Compile Include="JsonBackendOptions.fs" />
 		<Compile Include="JsonBackend.fs" />
@@ -48,12 +44,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- Runtime dependency on System.Text.Json -->
-		<PackageReference Include="System.Text.Json" Version="10.0.3" />
-
-		<!-- Runtime type model used by the backend -->
-		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
-
 		<!-- Design-time only dependency (never flows to consumers) -->
 		<PackageReference Include="FSharp.SourceDjinn" Version="0.2.2" PrivateAssets="all" />
 

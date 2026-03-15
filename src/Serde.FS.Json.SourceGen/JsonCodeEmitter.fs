@@ -6,43 +6,6 @@ open FSharp.SourceDjinn.TypeModel
 
 module internal JsonCodeEmitterImpl =
 
-    let writerCallForType (fieldName: string) (normalizedType: string) (valueExpr: string) (indent: string) : string =
-        match normalizedType with
-        | "string" ->
-            $"%s{indent}writer.WriteString(\"%s{fieldName}\", %s{valueExpr})"
-        | "int" | "int32" | "int64" | "float" | "double" | "decimal" ->
-            $"%s{indent}writer.WriteNumber(\"%s{fieldName}\", %s{valueExpr})"
-        | "bool" ->
-            $"%s{indent}writer.WriteBoolean(\"%s{fieldName}\", %s{valueExpr})"
-        | "byte[]" ->
-            $"%s{indent}writer.WriteBase64String(\"%s{fieldName}\", %s{valueExpr})"
-        | "datetime" | "system.datetime" ->
-            $"%s{indent}writer.WriteString(\"%s{fieldName}\", %s{valueExpr}.ToString(\"O\"))"
-        | "guid" | "system.guid" ->
-            $"%s{indent}writer.WriteString(\"%s{fieldName}\", %s{valueExpr}.ToString())"
-        | _ ->
-            $"%s{indent}writer.WritePropertyName(\"%s{fieldName}\")\n%s{indent}JsonSerializer.Serialize(writer, %s{valueExpr}, options)"
-
-    let writerCall (fieldName: string) (rawFieldName: string) (fsharpType: string) : string =
-        let normalizedType = fsharpType.Trim().ToLowerInvariant()
-        let indent = "                    "
-
-        // Check for option types: "T option" (postfix) or "option<T>" (prefix)
-        let isOption, innerType =
-            if normalizedType.EndsWith(" option") then
-                true, fsharpType.Trim().Substring(0, fsharpType.Trim().Length - " option".Length).Trim()
-            elif normalizedType.StartsWith("option<") && normalizedType.EndsWith(">") then
-                true, fsharpType.Trim().Substring("option<".Length, fsharpType.Trim().Length - "option<".Length - 1).Trim()
-            else
-                false, fsharpType.Trim()
-
-        if isOption then
-            let innerIndent = indent + "    "
-            let innerCall = writerCallForType fieldName (innerType.ToLowerInvariant()) "v" innerIndent
-            $"%s{indent}match value.%s{rawFieldName} with\n%s{indent}| Some v ->\n%s{innerCall}\n%s{indent}| None ->\n%s{innerIndent}writer.WriteNull(\"%s{fieldName}\")"
-        else
-            writerCallForType fieldName normalizedType $"value.%s{rawFieldName}" indent
-
     let lowerFirst (s: string) =
         if System.String.IsNullOrEmpty(s) then s
         else string (System.Char.ToLowerInvariant(s.[0])) + s.Substring(1)
@@ -69,8 +32,7 @@ module internal JsonCodeEmitterImpl =
               yield info.Raw.TypeName ]
         String.concat "." parts
 
-    /// Pascal name that accounts for instantiated generics (which have GenericArguments
-    /// but Kind = Union/Record after substitution, so typeInfoToPascalName misses them).
+    /// Pascal name that accounts for instantiated generics.
     let rec private pascalNameForArg (ti: Types.TypeInfo) : string =
         if not ti.GenericArguments.IsEmpty then
             let argPart = ti.GenericArguments |> List.map pascalNameForArg |> String.concat ""
@@ -78,8 +40,7 @@ module internal JsonCodeEmitterImpl =
         else
             sanitize (Types.typeInfoToPascalName ti)
 
-    /// The name used for module/converter/function names. For constructed generics,
-    /// uses underscore-separated type arguments (e.g., Wrapper_Person).
+    /// The name used for module/codec/function names.
     let emittedName (info: SerdeTypeInfo) : string =
         match info.GenericContext with
         | Some ctx ->
@@ -87,10 +48,7 @@ module internal JsonCodeEmitterImpl =
             sanitize $"%s{info.Raw.TypeName}_%s{argNames}"
         | None -> sanitize info.Raw.TypeName
 
-    /// The fully-qualified F# type expression for typeof<> / JsonTypeInfo<>.
-    /// For constructed generics, produces e.g. MyApp.Wrapper<MyApp.Person>.
-    /// Note: After TypeInfo.instantiate, info.Raw.Kind is the substituted kind (e.g., Union)
-    /// not ConstructedGenericType, so we must build the FQN from GenericContext.
+    /// The fully-qualified F# type expression for typeof<>.
     let emittedFqn (info: SerdeTypeInfo) : string =
         match info.GenericContext with
         | Some ctx ->
@@ -103,6 +61,31 @@ module internal JsonCodeEmitterImpl =
             $"%s{baseName}<%s{argNames}>"
         | None -> fullyQualifiedName info
 
+    /// Generates the encode expression for a single field value.
+    let private encodeFieldExpr (fieldName: string) (rawFieldName: string) (fsharpType: string) (normalizedType: string) (isOption: bool) (innerType: string) (indent: string) : string =
+        if isOption then
+            let innerIndent = indent + "    "
+            let encodeInner =
+                $"%s{innerIndent}let fieldCodec = Serde.FS.Json.Codec.CodecResolver.resolve typeof<%s{innerType}> Serde.FS.Json.Codec.GlobalCodecRegistry.Current\n" +
+                $"%s{innerIndent}(\"%s{fieldName}\", fieldCodec.Encode(box v))"
+            $"%s{indent}match value.%s{rawFieldName} with\n" +
+            $"%s{indent}| Some v ->\n%s{encodeInner}\n" +
+            $"%s{indent}| None ->\n" +
+            $"%s{innerIndent}(\"%s{fieldName}\", Serde.FS.Json.Codec.JsonValue.Null)"
+        else
+            $"%s{indent}let fieldCodec_%s{rawFieldName} = Serde.FS.Json.Codec.CodecResolver.resolve typeof<%s{fsharpType}> Serde.FS.Json.Codec.GlobalCodecRegistry.Current\n" +
+            $"%s{indent}(\"%s{fieldName}\", fieldCodec_%s{rawFieldName}.Encode(box value.%s{rawFieldName}))"
+
+    /// Determines if a type is an option and extracts the inner type.
+    let private parseOptionType (fsharpType: string) =
+        let normalizedType = fsharpType.Trim().ToLowerInvariant()
+        if normalizedType.EndsWith(" option") then
+            true, fsharpType.Trim().Substring(0, fsharpType.Trim().Length - " option".Length).Trim()
+        elif normalizedType.StartsWith("option<") && normalizedType.EndsWith(">") then
+            true, fsharpType.Trim().Substring("option<".Length, fsharpType.Trim().Length - "option<".Length - 1).Trim()
+        else
+            false, fsharpType.Trim()
+
     let emitRecord (info: SerdeTypeInfo) : string =
         let sb = StringBuilder()
         let append (s: string) = sb.AppendLine(s) |> ignore
@@ -114,84 +97,70 @@ module internal JsonCodeEmitterImpl =
         append $"module rec Serde.Generated.%s{name}"
         append ""
         append "open System"
-        append "open System.Text.Json"
-        append "open System.Text.Json.Serialization.Metadata"
+        append "open Serde.FS.Json.Codec"
         append ""
         append "[<AutoOpen>]"
-        append $"module internal %s{name}SerdeTypeInfo ="
+        append $"module internal %s{name}SerdeCodec ="
         append ""
 
-        let fnName = lowerFirst name + "JsonTypeInfo"
-
+        let fnName = lowerFirst name + "JsonCodec"
         let fqn = emittedFqn info
-        append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqn}> ="
 
-        append "        let info ="
-        append $"            JsonMetadataServices.CreateObjectInfo<%s{fqn}>("
-        append "                options,"
-        append $"                JsonObjectInfoValues<%s{fqn}>("
+        append $"    let %s{fnName} : IJsonCodec<%s{fqn}> ="
+        append $"        {{ new IJsonCodec<%s{fqn}> with"
 
-        // ObjectWithParameterizedConstructorCreator: constructs F# record from args array
-        append "                    ObjectWithParameterizedConstructorCreator = (fun (args: obj[]) ->"
+        // Encode
+        append "            member _.Encode(value) ="
+        append "                JsonValue.Object ["
+        for field in fields do
+            let fsharpType = Types.typeInfoToFqFSharpType field.Type
+            let isOption, innerType = parseOptionType fsharpType
+            let normalizedType = fsharpType.Trim().ToLowerInvariant()
+            let indent = "                    "
+            let expr = encodeFieldExpr field.Name field.RawName fsharpType normalizedType isOption innerType indent
+            append expr
+        append "                ]"
+
+        // Decode
+        append "            member _.Decode(json) ="
+        append "                match json with"
+        append "                | JsonValue.Object fields ->"
+        append "                    let fieldMap = dict fields"
+
+        for field in fields do
+            let fsharpType = Types.typeInfoToFqFSharpType field.Type
+            let isOption, innerType = parseOptionType fsharpType
+            if isOption then
+                append $"                    let %s{lowerFirst field.RawName} ="
+                append $"                        match fieldMap.TryGetValue(\"%s{field.Name}\") with"
+                append $"                        | true, JsonValue.Null -> None"
+                append $"                        | true, v ->"
+                append $"                            let fieldCodec = CodecResolver.resolve typeof<%s{innerType}> GlobalCodecRegistry.Current"
+                append $"                            Some(fieldCodec.Decode(v) :?> %s{innerType})"
+                append $"                        | false, _ -> None"
+            else
+                append $"                    let fieldCodec_%s{field.RawName} = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+                append $"                    let %s{lowerFirst field.RawName} = fieldCodec_%s{field.RawName}.Decode(fieldMap.[\"%s{field.Name}\"]) :?> %s{fsharpType}"
+
         let fieldAssignments =
             fields
-            |> List.mapi (fun i field ->
-                let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                $"%s{field.RawName} = args.[%d{i}] :?> %s{fsharpType}")
+            |> List.map (fun f -> $"%s{f.RawName} = %s{lowerFirst f.RawName}")
             |> String.concat "; "
-        append $"                        {{ %s{fieldAssignments} }} : %s{fqn}),"
+        append $"                    {{ %s{fieldAssignments} }} : %s{fqn}"
+        append "                | _ -> failwith \"Expected JSON object\""
+        append "        }"
 
-        // ConstructorParameterMetadataInitializer: describes each constructor parameter
-        append "                    ConstructorParameterMetadataInitializer = (fun _ ->"
-        append "                        [|"
-        for i, field in fields |> List.mapi (fun i x -> i, x) do
-            let fsharpType = Types.typeInfoToFqFSharpType field.Type
-            append $"                            JsonParameterInfoValues(Name = \"%s{lowerFirst field.Name}\", ParameterType = typeof<%s{fsharpType}>, Position = %d{i})"
-        append "                        |]"
-        append "                    ),"
-
-        append "                    PropertyMetadataInitializer = (fun _ ->"
-        append "                        [|"
-
-        for field in fields do
-            let fsharpType = Types.typeInfoToFqFSharpType field.Type
-            append $"                            JsonMetadataServices.CreatePropertyInfo<%s{fsharpType}>("
-            append "                                options,"
-            append $"                                JsonPropertyInfoValues<%s{fsharpType}>("
-            append "                                    IsProperty = true,"
-            append "                                    IsPublic = true,"
-            append $"                                    DeclaringType = typeof<%s{fqn}>,"
-            append $"                                    PropertyName = \"%s{field.Name}\","
-            append $"                                    Getter = (fun (obj: obj) -> (obj :?> %s{fqn}).%s{field.RawName})"
-            append "                                )"
-            append "                            )"
-
-        append "                        |]"
-        append "                    ),"
-        append "                    SerializeHandler = (fun writer value ->"
-        append "                    writer.WriteStartObject()"
-
-        for field in fields do
-            let fsharpType = Types.typeInfoToFqFSharpType field.Type
-            let call = writerCall field.Name field.RawName fsharpType
-            append call
-
-        append "                    writer.WriteEndObject()"
-        append "                )"
-        append "            )"
-        append "        )"
-
-        // Apply field-level codec overrides
+        // Field-level codec overrides (register in GlobalCodecRegistry)
         let fieldsWithCodecs = fields |> List.indexed |> List.filter (fun (_, f) -> f.CodecType.IsSome)
         if not fieldsWithCodecs.IsEmpty then
-            for (i, field) in fieldsWithCodecs do
+            append ""
+            append "    // Field-level codec registrations"
+            for (_i, field) in fieldsWithCodecs do
                 let codecFqn = field.CodecType.Value
                 let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                append $"        let fieldCodec_%d{i} = %s{codecFqn}() :> Serde.FS.Json.Codec.IJsonCodec<%s{fsharpType}>"
-                append $"        let fieldCodecBoxed_%d{i} = Serde.FS.Json.Codec.JsonCodec.boxCodec fieldCodec_%d{i}"
-                append $"        info.Properties.[%d{i}].CustomConverter <- Serde.FS.Json.Codec.UntypedCodecConverter(fieldCodecBoxed_%d{i})"
-
-        append "        info"
+                append $"    let private _fieldCodecReg_%s{field.RawName} ="
+                append $"        let codec = %s{codecFqn}() :> IJsonCodec<%s{fsharpType}>"
+                append $"        GlobalCodecRegistry.Current <- CodecRegistry.add (typeof<%s{fsharpType}>, JsonCodec.boxCodec codec) GlobalCodecRegistry.Current"
 
         sb.ToString()
 
@@ -204,8 +173,7 @@ module internal JsonCodeEmitterImpl =
         let pascalName = Types.typeInfoToPascalName info.Raw
         let fqType = Types.typeInfoToFqFSharpType info.Raw
         let innerFqType = Types.typeInfoToFqFSharpType inner
-        let converterName = pascalName + "Converter"
-        let fnName = lowerFirst pascalName + "JsonTypeInfo"
+        let fnName = lowerFirst pascalName + "JsonCodec"
 
         let sb = StringBuilder()
         let append (s: string) = sb.AppendLine(s) |> ignore
@@ -213,25 +181,26 @@ module internal JsonCodeEmitterImpl =
         append "// <auto-generated />"
         append $"module rec Serde.Generated.%s{pascalName}"
         append ""
-        append "open System.Text.Json"
-        append "open System.Text.Json.Serialization"
-        append "open System.Text.Json.Serialization.Metadata"
+        append "open Serde.FS.Json.Codec"
         append ""
         append "[<AutoOpen>]"
-        append $"module internal %s{pascalName}SerdeTypeInfo ="
+        append $"module internal %s{pascalName}SerdeCodec ="
         append ""
-        append $"    type internal %s{converterName}() ="
-        append $"        inherit JsonConverter<%s{fqType}>()"
-        append "        override _.Read(reader, _typeToConvert, options) ="
-        append "            if reader.TokenType = JsonTokenType.Null then None"
-        append $"            else Some(JsonSerializer.Deserialize<%s{innerFqType}>(&reader, options))"
-        append "        override _.Write(writer, value, options) ="
-        append "            match value with"
-        append "            | None -> writer.WriteNullValue()"
-        append "            | Some v -> JsonSerializer.Serialize(writer, v, options)"
-        append ""
-        append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqType}> ="
-        append $"        JsonMetadataServices.CreateValueInfo<%s{fqType}>(options, %s{converterName}())"
+        append $"    let %s{fnName} : IJsonCodec<%s{fqType}> ="
+        append $"        {{ new IJsonCodec<%s{fqType}> with"
+        append "            member _.Encode(value) ="
+        append "                match value with"
+        append "                | None -> JsonValue.Null"
+        append "                | Some v ->"
+        append $"                    let innerCodec = CodecResolver.resolve typeof<%s{innerFqType}> GlobalCodecRegistry.Current"
+        append "                    innerCodec.Encode(box v)"
+        append "            member _.Decode(json) ="
+        append "                match json with"
+        append "                | JsonValue.Null -> None"
+        append "                | v ->"
+        append $"                    let innerCodec = CodecResolver.resolve typeof<%s{innerFqType}> GlobalCodecRegistry.Current"
+        append $"                    Some(innerCodec.Decode(v) :?> %s{innerFqType})"
+        append "        }"
 
         sb.ToString()
 
@@ -243,8 +212,7 @@ module internal JsonCodeEmitterImpl =
 
         let pascalName = Types.typeInfoToPascalName info.Raw
         let fqType = Types.typeInfoToFqFSharpType info.Raw
-        let converterName = pascalName + "Converter"
-        let fnName = lowerFirst pascalName + "JsonTypeInfo"
+        let fnName = lowerFirst pascalName + "JsonCodec"
 
         let sb = StringBuilder()
         let append (s: string) = sb.AppendLine(s) |> ignore
@@ -252,35 +220,33 @@ module internal JsonCodeEmitterImpl =
         append "// <auto-generated />"
         append $"module rec Serde.Generated.%s{pascalName}"
         append ""
-        append "open System.Text.Json"
-        append "open System.Text.Json.Serialization"
-        append "open System.Text.Json.Serialization.Metadata"
+        append "open Serde.FS.Json.Codec"
         append ""
         append "[<AutoOpen>]"
-        append $"module internal %s{pascalName}SerdeTypeInfo ="
+        append $"module internal %s{pascalName}SerdeCodec ="
         append ""
-        append $"    type internal %s{converterName}() ="
-        append $"        inherit JsonConverter<%s{fqType}>()"
-        append "        override _.Read(reader, _typeToConvert, options) ="
-        append "            if reader.TokenType <> JsonTokenType.StartArray then"
-        append "                raise (JsonException(\"Expected StartArray for tuple\"))"
+        append $"    let %s{fnName} : IJsonCodec<%s{fqType}> ="
+        append $"        {{ new IJsonCodec<%s{fqType}> with"
+        append "            member _.Encode(value) ="
+        let destructure = elements |> List.mapi (fun i _ -> $"e%d{i}") |> String.concat ", "
+        append $"                let (%s{destructure}) = value"
+        append "                JsonValue.Array ["
         for i, elem in elements |> List.mapi (fun i x -> i, x) do
             let elemFqType = Types.typeInfoToFqFSharpType elem.Type
-            append "            reader.Read() |> ignore"
-            append $"            let e%d{i} = JsonSerializer.Deserialize<%s{elemFqType}>(&reader, options)"
-        append "            reader.Read() |> ignore"
+            append $"                    let elemCodec_%d{i} = CodecResolver.resolve typeof<%s{elemFqType}> GlobalCodecRegistry.Current"
+            append $"                    elemCodec_%d{i}.Encode(box e%d{i})"
+        append "                ]"
+        append "            member _.Decode(json) ="
+        append "                match json with"
+        append "                | JsonValue.Array items ->"
+        for i, elem in elements |> List.mapi (fun i x -> i, x) do
+            let elemFqType = Types.typeInfoToFqFSharpType elem.Type
+            append $"                    let elemCodec_%d{i} = CodecResolver.resolve typeof<%s{elemFqType}> GlobalCodecRegistry.Current"
+            append $"                    let e%d{i} = elemCodec_%d{i}.Decode(items.[%d{i}]) :?> %s{elemFqType}"
         let tupleExpr = elements |> List.mapi (fun i _ -> $"e%d{i}") |> String.concat ", "
-        append $"            (%s{tupleExpr})"
-        append "        override _.Write(writer, value, options) ="
-        append "            writer.WriteStartArray()"
-        let destructure = elements |> List.mapi (fun i _ -> $"e%d{i}") |> String.concat ", "
-        append $"            let (%s{destructure}) = value"
-        for i, _elem in elements |> List.mapi (fun i x -> i, x) do
-            append $"            JsonSerializer.Serialize(writer, e%d{i}, options)"
-        append "            writer.WriteEndArray()"
-        append ""
-        append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqType}> ="
-        append $"        JsonMetadataServices.CreateValueInfo<%s{fqType}>(options, %s{converterName}())"
+        append $"                    (%s{tupleExpr})"
+        append "                | _ -> failwith \"Expected JSON array for tuple\""
+        append "        }"
 
         sb.ToString()
 
@@ -304,9 +270,6 @@ module internal JsonCodeEmitterImpl =
     let emitUnion (info: SerdeTypeInfo) : string =
         let cases = info.UnionCases |> Option.defaultValue []
         let fqn = emittedFqn info
-        // For generic unions, qualify cases with just namespace/module (not the type)
-        // because F# can't use generic args in pattern paths.
-        // e.g., Program.Wrapper(v) not Program.Wrapper<T>.Wrapper(v)
         let caseFqn =
             match info.GenericContext with
             | Some _ ->
@@ -317,8 +280,7 @@ module internal JsonCodeEmitterImpl =
                 else String.concat "." parts
             | None -> fullyQualifiedName info
         let pascalName = emittedName info
-        let converterName = pascalName + "Converter"
-        let fnName = lowerFirst pascalName + "JsonTypeInfo"
+        let fnName = lowerFirst pascalName + "JsonCodec"
 
         let activeCases = cases |> List.filter (fun c -> not c.Attributes.Skip)
         let hasSkippedCases = cases |> List.exists (fun c -> c.Attributes.Skip)
@@ -330,149 +292,123 @@ module internal JsonCodeEmitterImpl =
         append "// <auto-generated />"
         append $"module rec Serde.Generated.%s{pascalName}"
         append ""
-        append "open System.Text.Json"
-        append "open System.Text.Json.Serialization"
-        append "open System.Text.Json.Serialization.Metadata"
+        append "open Serde.FS.Json.Codec"
         append ""
         append "[<AutoOpen>]"
-        append $"module internal %s{pascalName}SerdeTypeInfo ="
+        append $"module internal %s{pascalName}SerdeCodec ="
         append ""
-        append $"    type internal %s{converterName}() ="
-        append $"        inherit JsonConverter<%s{fqn}>()"
+        append $"    let %s{fnName} : IJsonCodec<%s{fqn}> ="
+        append $"        {{ new IJsonCodec<%s{fqn}> with"
 
         match kind with
         | WrapperUnion ->
-            // Wrapper DU: exactly 1 case with exactly 1 field → { "CaseName": <payload> }
             let case = activeCases.[0]
-
-            // Read override
-            append "        override _.Read(reader, _typeToConvert, options) ="
-            append "            if reader.TokenType <> JsonTokenType.StartObject then"
-            append "                raise (JsonException(\"Expected StartObject for union\"))"
-            append "            reader.Read() |> ignore"
-            append "            let caseName = reader.GetString()"
-            append "            reader.Read() |> ignore"
-            append $"            if caseName = \"%s{case.CaseName}\" then"
             let field = case.Fields.[0]
             let fsharpType = Types.typeInfoToFqFSharpType field.Type
-            append $"                let v = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
-            append "                reader.Read() |> ignore"
-            append $"                %s{caseFqn}.%s{case.RawCaseName}(v)"
-            append $"            else raise (JsonException($\"Unknown union case: %%s{{caseName}}\"))"
 
-            // Write override
-            append "        override _.Write(writer, value, options) ="
-            append "            writer.WriteStartObject()"
-            append "            match value with"
-            append $"            | %s{caseFqn}.%s{case.RawCaseName}(v) ->"
-            append $"                writer.WritePropertyName(\"%s{case.CaseName}\")"
-            append "                JsonSerializer.Serialize(writer, v, options)"
-            append "            writer.WriteEndObject()"
+            // Encode
+            append "            member _.Encode(value) ="
+            append "                match value with"
+            append $"                | %s{caseFqn}.%s{case.RawCaseName}(v) ->"
+            append $"                    let innerCodec = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+            append $"                    JsonValue.Object [\"%s{case.CaseName}\", innerCodec.Encode(box v)]"
+
+            // Decode
+            append "            member _.Decode(json) ="
+            append "                match json with"
+            append "                | JsonValue.Object [(caseName, payload)] ->"
+            append $"                    if caseName = \"%s{case.CaseName}\" then"
+            append $"                        let innerCodec = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+            append $"                        %s{caseFqn}.%s{case.RawCaseName}(innerCodec.Decode(payload) :?> %s{fsharpType})"
+            append "                    else failwith (sprintf \"Unknown union case: %s\" caseName)"
+            append "                | _ -> failwith \"Expected JSON object for wrapper union\""
 
         | MultiCaseUnion ->
-            // Multi-case DU: { "Case": "CaseName", "Fields": [...] }
-
-            // Read override
-            append "        override _.Read(reader, _typeToConvert, options) ="
-            append "            if reader.TokenType <> JsonTokenType.StartObject then"
-            append "                raise (JsonException(\"Expected StartObject for union\"))"
-            append "            reader.Read() |> ignore"
-            append "            if reader.GetString() <> \"Case\" then"
-            append "                raise (JsonException(\"Expected 'Case' property\"))"
-            append "            reader.Read() |> ignore"
-            append "            let caseName = reader.GetString()"
-            append "            reader.Read() |> ignore"
-            append "            if reader.GetString() <> \"Fields\" then"
-            append "                raise (JsonException(\"Expected 'Fields' property\"))"
-            append "            reader.Read() |> ignore"
-            append "            if reader.TokenType <> JsonTokenType.StartArray then"
-            append "                raise (JsonException(\"Expected StartArray for Fields\"))"
-            append $"            let mutable result = Unchecked.defaultof<%s{fqn}>"
-
-            for i, case in activeCases |> List.mapi (fun i x -> i, x) do
-                let keyword = if i = 0 then "if" else "elif"
-                let shape = classifyCaseShape case
-                append $"            %s{keyword} caseName = \"%s{case.CaseName}\" then"
-                match shape with
-                | Nullary ->
-                    append "                reader.Read() |> ignore"
-                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}"
-                | SingleField ->
-                    let field = case.Fields.[0]
-                    let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                    append "                reader.Read() |> ignore"
-                    append $"                let v = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
-                    append "                reader.Read() |> ignore"
-                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}(v)"
-                | TupleFields ->
-                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
-                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                        append "                reader.Read() |> ignore"
-                        append $"                let e%d{j} = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
-                    append "                reader.Read() |> ignore"
-                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
-                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
-                | RecordFields ->
-                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
-                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
-                        append "                reader.Read() |> ignore"
-                        append $"                let e%d{j} = JsonSerializer.Deserialize<%s{fsharpType}>(&reader, options)"
-                    append "                reader.Read() |> ignore"
-                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
-                    append $"                result <- %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
-
-            append $"            else raise (JsonException($\"Unknown union case: %%s{{caseName}}\"))"
-            append "            reader.Read() |> ignore"
-            append "            result"
-
-            // Write override
-            append "        override _.Write(writer, value, options) ="
-            append "            writer.WriteStartObject()"
-            append "            match value with"
+            // Encode
+            append "            member _.Encode(value) ="
+            append "                match value with"
 
             for case in activeCases do
                 let shape = classifyCaseShape case
                 match shape with
                 | Nullary ->
-                    append $"            | %s{caseFqn}.%s{case.RawCaseName} ->"
-                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
-                    append "                writer.WritePropertyName(\"Fields\")"
-                    append "                writer.WriteStartArray()"
-                    append "                writer.WriteEndArray()"
+                    append $"                | %s{caseFqn}.%s{case.RawCaseName} ->"
+                    append $"                    JsonValue.Object [\"Case\", JsonValue.String \"%s{case.CaseName}\"; \"Fields\", JsonValue.Array []]"
                 | SingleField ->
-                    append $"            | %s{caseFqn}.%s{case.RawCaseName}(v) ->"
-                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
-                    append "                writer.WritePropertyName(\"Fields\")"
-                    append "                writer.WriteStartArray()"
-                    append "                JsonSerializer.Serialize(writer, v, options)"
-                    append "                writer.WriteEndArray()"
+                    let field = case.Fields.[0]
+                    let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                    append $"                | %s{caseFqn}.%s{case.RawCaseName}(v) ->"
+                    append $"                    let fieldCodec = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+                    append $"                    JsonValue.Object [\"Case\", JsonValue.String \"%s{case.CaseName}\"; \"Fields\", JsonValue.Array [fieldCodec.Encode(box v)]]"
                 | TupleFields ->
                     let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
-                    append $"            | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
-                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
-                    append "                writer.WritePropertyName(\"Fields\")"
-                    append "                writer.WriteStartArray()"
-                    for j in 0 .. case.Fields.Length - 1 do
-                        append $"                JsonSerializer.Serialize(writer, e%d{j}, options)"
-                    append "                writer.WriteEndArray()"
+                    append $"                | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
+                    append "                    let fieldValues = ["
+                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
+                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                        append $"                        let fc_%d{j} = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+                        append $"                        fc_%d{j}.Encode(box e%d{j})"
+                    append "                    ]"
+                    append $"                    JsonValue.Object [\"Case\", JsonValue.String \"%s{case.CaseName}\"; \"Fields\", JsonValue.Array fieldValues]"
                 | RecordFields ->
                     let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
-                    append $"            | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
-                    append $"                writer.WriteString(\"Case\", \"%s{case.CaseName}\")"
-                    append "                writer.WritePropertyName(\"Fields\")"
-                    append "                writer.WriteStartArray()"
-                    for j in 0 .. case.Fields.Length - 1 do
-                        append $"                JsonSerializer.Serialize(writer, e%d{j}, options)"
-                    append "                writer.WriteEndArray()"
+                    append $"                | %s{caseFqn}.%s{case.RawCaseName}(%s{args}) ->"
+                    append "                    let fieldValues = ["
+                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
+                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                        append $"                        let fc_%d{j} = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+                        append $"                        fc_%d{j}.Encode(box e%d{j})"
+                    append "                    ]"
+                    append $"                    JsonValue.Object [\"Case\", JsonValue.String \"%s{case.CaseName}\"; \"Fields\", JsonValue.Array fieldValues]"
 
             if hasSkippedCases then
-                append "            | _ -> raise (JsonException(\"Unknown or skipped union case\"))"
+                append "                | _ -> failwith \"Unknown or skipped union case\""
 
-            append "            writer.WriteEndObject()"
+            // Decode
+            append "            member _.Decode(json) ="
+            append "                match json with"
+            append "                | JsonValue.Object fields ->"
+            append "                    let fieldMap = dict fields"
+            append "                    let caseName ="
+            append "                        match fieldMap.[\"Case\"] with"
+            append "                        | JsonValue.String s -> s"
+            append "                        | _ -> failwith \"Expected string for 'Case'\""
+            append "                    let fieldsArr ="
+            append "                        match fieldMap.[\"Fields\"] with"
+            append "                        | JsonValue.Array items -> items"
+            append "                        | _ -> failwith \"Expected array for 'Fields'\""
 
-        append ""
-        append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqn}> ="
-        append $"        JsonMetadataServices.CreateValueInfo<%s{fqn}>(options, %s{converterName}())"
+            for i, case in activeCases |> List.mapi (fun i x -> i, x) do
+                let keyword = if i = 0 then "if" else "elif"
+                let shape = classifyCaseShape case
+                append $"                    %s{keyword} caseName = \"%s{case.CaseName}\" then"
+                match shape with
+                | Nullary ->
+                    append $"                        %s{caseFqn}.%s{case.RawCaseName}"
+                | SingleField ->
+                    let field = case.Fields.[0]
+                    let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                    append $"                        let fc = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+                    append $"                        %s{caseFqn}.%s{case.RawCaseName}(fc.Decode(fieldsArr.[0]) :?> %s{fsharpType})"
+                | TupleFields ->
+                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
+                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                        append $"                        let fc_%d{j} = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+                        append $"                        let e%d{j} = fc_%d{j}.Decode(fieldsArr.[%d{j}]) :?> %s{fsharpType}"
+                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
+                    append $"                        %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
+                | RecordFields ->
+                    for j, field in case.Fields |> List.mapi (fun j x -> j, x) do
+                        let fsharpType = Types.typeInfoToFqFSharpType field.Type
+                        append $"                        let fc_%d{j} = CodecResolver.resolve typeof<%s{fsharpType}> GlobalCodecRegistry.Current"
+                        append $"                        let e%d{j} = fc_%d{j}.Decode(fieldsArr.[%d{j}]) :?> %s{fsharpType}"
+                    let args = case.Fields |> List.mapi (fun j _ -> $"e%d{j}") |> String.concat ", "
+                    append $"                        %s{caseFqn}.%s{case.RawCaseName}(%s{args})"
+
+            append "                    else failwith (sprintf \"Unknown union case: %s\" caseName)"
+            append "                | _ -> failwith \"Expected JSON object for union\""
+
+        append "        }"
 
         sb.ToString()
 
@@ -480,52 +416,48 @@ module internal JsonCodeEmitterImpl =
         let cases = info.EnumCases |> Option.defaultValue []
         let fqn = emittedFqn info
         let pascalName = emittedName info
-        let converterName = pascalName + "Converter"
-        let fnName = lowerFirst pascalName + "JsonTypeInfo"
+        let fnName = lowerFirst pascalName + "JsonCodec"
 
         let sb = StringBuilder()
         let append (s: string) = sb.AppendLine(s) |> ignore
 
+        let activeCases = cases |> List.filter (fun c -> not c.Attributes.Skip)
+
         append "// <auto-generated />"
         append $"module rec Serde.Generated.%s{pascalName}"
         append ""
-        append "open System.Text.Json"
-        append "open System.Text.Json.Serialization"
-        append "open System.Text.Json.Serialization.Metadata"
+        append "open Serde.FS.Json.Codec"
         append ""
         append "[<AutoOpen>]"
-        append $"module internal %s{pascalName}SerdeTypeInfo ="
+        append $"module internal %s{pascalName}SerdeCodec ="
         append ""
-        append $"    type internal %s{converterName}() ="
-        append $"        inherit JsonConverter<%s{fqn}>()"
-        append "        override _.Read(reader, _typeToConvert, _options) ="
-        append "            let s = reader.GetString()"
+        append $"    let %s{fnName} : IJsonCodec<%s{fqn}> ="
+        append $"        {{ new IJsonCodec<%s{fqn}> with"
 
-        let activeCases = cases |> List.filter (fun c -> not c.Attributes.Skip)
+        // Encode
+        append "            member _.Encode(value) ="
         for i, c in activeCases |> List.mapi (fun i x -> i, x) do
             let keyword = if i = 0 then "if" else "elif"
-            append $"            %s{keyword} s = \"%s{c.CaseName}\" then %s{fqn}.%s{c.RawCaseName}"
+            append $"                %s{keyword} value = %s{fqn}.%s{c.RawCaseName} then JsonValue.String \"%s{c.CaseName}\""
+        append "                else failwith (sprintf \"Unknown enum value: %A\" value)"
 
-        append $"            else raise (JsonException($\"Unknown enum value: %%s{{s}}\"))"
-
-        append "        override _.Write(writer, value, _options) ="
-
+        // Decode
+        append "            member _.Decode(json) ="
+        append "                match json with"
+        append "                | JsonValue.String s ->"
         for i, c in activeCases |> List.mapi (fun i x -> i, x) do
             let keyword = if i = 0 then "if" else "elif"
-            append $"            %s{keyword} value = %s{fqn}.%s{c.RawCaseName} then writer.WriteStringValue(\"%s{c.CaseName}\")"
-
-        append $"            else raise (JsonException($\"Unknown enum value: %%A{{value}}\"))"
-
-        append ""
-        append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqn}> ="
-        append $"        JsonMetadataServices.CreateValueInfo<%s{fqn}>(options, %s{converterName}())"
+            append $"                    %s{keyword} s = \"%s{c.CaseName}\" then %s{fqn}.%s{c.RawCaseName}"
+        append "                    else failwith (sprintf \"Unknown enum value: %s\" s)"
+        append "                | _ -> failwith \"Expected JSON string for enum\""
+        append "        }"
 
         sb.ToString()
 
     let emitCodec (info: SerdeTypeInfo) (codecFqn: string) : string =
         let fqn = emittedFqn info
         let pascalName = emittedName info
-        let fnName = lowerFirst pascalName + "JsonTypeInfo"
+        let fnName = lowerFirst pascalName + "JsonCodec"
 
         let sb = StringBuilder()
         let append (s: string) = sb.AppendLine(s) |> ignore
@@ -533,16 +465,13 @@ module internal JsonCodeEmitterImpl =
         append "// <auto-generated />"
         append $"module rec Serde.Generated.%s{pascalName}"
         append ""
-        append "open System.Text.Json"
-        append "open System.Text.Json.Serialization.Metadata"
+        append "open Serde.FS.Json.Codec"
         append ""
         append "[<AutoOpen>]"
-        append $"module internal %s{pascalName}SerdeTypeInfo ="
+        append $"module internal %s{pascalName}SerdeCodec ="
         append ""
-        append $"    let %s{fnName} (options: JsonSerializerOptions) : JsonTypeInfo<%s{fqn}> ="
-        append $"        let codec = %s{codecFqn}() :> Serde.FS.Json.Codec.IJsonCodec<%s{fqn}>"
-        append $"        let converter = Serde.FS.Json.Codec.CodecConverter<%s{fqn}>(codec)"
-        append $"        JsonMetadataServices.CreateValueInfo<%s{fqn}>(options, converter)"
+        append $"    let %s{fnName} : IJsonCodec<%s{fqn}> ="
+        append $"        %s{codecFqn}() :> IJsonCodec<%s{fqn}>"
 
         sb.ToString()
 
@@ -569,8 +498,8 @@ module internal JsonCodeEmitterImpl =
 
     let private resolverFnName (info: SerdeTypeInfo) : string =
         match info.Raw.Kind with
-        | Types.Option _ | Types.Tuple _ -> lowerFirst (Types.typeInfoToPascalName info.Raw) + "JsonTypeInfo"
-        | _ -> lowerFirst (emittedName info) + "JsonTypeInfo"
+        | Types.Option _ | Types.Tuple _ -> lowerFirst (Types.typeInfoToPascalName info.Raw) + "JsonCodec"
+        | _ -> lowerFirst (emittedName info) + "JsonCodec"
 
     let emitResolver (types: SerdeTypeInfo list) : string option =
         match types with
@@ -582,30 +511,18 @@ module internal JsonCodeEmitterImpl =
             append "// <auto-generated />"
             append "module Serde.Generated.SerdeJsonResolver"
             append ""
-            append "open System.Text.Json"
-            append "open System.Text.Json.Serialization.Metadata"
+            append "open Serde.FS.Json.Codec"
 
             for info in types do
                 append $"open Serde.Generated.%s{resolverModuleName info}"
 
             append ""
-            append "type internal SerdeJsonGeneratedResolver() ="
-            append "    interface IJsonTypeInfoResolver with"
-            append "        member _.GetTypeInfo(ty, options) ="
-
-            for i, info in types |> List.mapi (fun i x -> i, x) do
-                let fqn = resolverFqn info
-                let fnName = resolverFnName info
-                let keyword = if i = 0 then "if" else "elif"
-                append $"            %s{keyword} ty = typeof<%s{fqn}> then %s{fnName} options :> JsonTypeInfo"
-
-            append "            else null"
-            append ""
             append "let register() ="
             for info in types do
                 let fqn = resolverFqn info
+                let fnName = resolverFnName info
                 append $"    Serde.FS.SerdeMetadata.register typeof<%s{fqn}>"
-            append "    Serde.FS.Json.SerdeJsonResolverRegistry.registerResolver(SerdeJsonGeneratedResolver())"
+                append $"    GlobalCodecRegistry.Current <- CodecRegistry.add (typeof<%s{fqn}>, JsonCodec.boxCodec %s{fnName}) GlobalCodecRegistry.Current"
 
             Some (sb.ToString())
 

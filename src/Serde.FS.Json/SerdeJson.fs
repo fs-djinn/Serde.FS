@@ -3,7 +3,7 @@ module Serde.FS.Json.SerdeJson
 open Serde.FS
 open Serde.FS.Json.Codec
 
-/// Sets System.Text.Json as the default backend for Serde.FS.
+/// Sets JSON as the default backend for Serde.FS.
 /// Call once at application startup.
 let private triggerBootstrap () =
     match global.Serde.ResolverBootstrap.registerAll with
