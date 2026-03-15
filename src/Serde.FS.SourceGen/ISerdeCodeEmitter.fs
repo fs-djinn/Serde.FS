@@ -5,6 +5,12 @@ type ISerdeCodeEmitter =
 
 type ISerdeResolverEmitter =
     abstract member EmitResolver : SerdeTypeInfo list -> string option
+    /// The hint name for the resolver file (e.g. "~SerdeResolver.serde.g.fs" or "~SerdeStjResolver.g.fs").
+    abstract member ResolverHintName : string
+    /// Additional files to emit after the resolver (e.g. registration + bootstrap). Returns (hintName, code) pairs.
+    abstract member EmitRegistrationFiles : unit -> (string * string) list
+    /// Whether this backend should emit the Djinn entry point wrapper.
+    abstract member EmitEntryPoint : bool
 
 module SerdeCodegenRegistry =
     let mutable private defaultEmitter : ISerdeCodeEmitter option = None

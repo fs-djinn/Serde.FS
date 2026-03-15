@@ -567,3 +567,6 @@ type StjCodeEmitter() =
         member _.Emit(info) = StjCodeEmitterImpl.emit info
     interface ISerdeResolverEmitter with
         member _.EmitResolver(types) = StjCodeEmitterImpl.emitResolver types
+        member _.ResolverHintName = "~SerdeStjResolver.g.fs"
+        member _.EmitRegistrationFiles() = []
+        member _.EmitEntryPoint = false
