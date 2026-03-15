@@ -12,6 +12,7 @@
   </Folder>
   <Folder Name="/SystemTextJson/">
     <Project Path="Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj" />
+    <Project Path="Serde.FS.SystemTextJson.SourceGen/Serde.FS.SystemTextJson.SourceGen.fsproj" />
   </Folder>
   <Folder Name="/_Tests/">
     <Project Path="Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj">
