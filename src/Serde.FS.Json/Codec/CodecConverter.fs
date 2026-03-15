@@ -5,7 +5,7 @@ open System.Text.Json
 open System.Text.Json.Serialization
 
 /// Converts between the codec JsonValue AST and STJ's Utf8JsonWriter/Utf8JsonReader.
-module internal JsonValueBridge =
+module JsonValueBridge =
 
     /// Writes a JsonValue to a Utf8JsonWriter.
     let rec writeJsonValue (writer: Utf8JsonWriter) (value: JsonValue) =

@@ -29,6 +29,7 @@
 		<Compile Include="Codec\JsonCodec.fs" />
 		<Compile Include="Codec\PrimitiveCodecs.fs" />
 		<Compile Include="Codec\CodecRegistry.fs" />
+		<Compile Include="Codec\CodecResolver.fs" />
 		<Compile Include="Codec\CodecBuilder.fs" />
 		<Compile Include="Codec\CodecConverter.fs" />
 		<Compile Include="Codec\JsonTypeInfoBuilder.fs" />
