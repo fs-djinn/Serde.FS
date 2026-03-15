@@ -53,11 +53,23 @@ module CodecResolver =
             match tryGetJsonCodecAttribute ty with
             | Some codec -> codec
             | None ->
-                // Step 2 — Registry
+                // Step 2 — Registry (exact match)
                 match CodecRegistry.tryFind ty registry with
                 | Some codec -> codec
                 | None ->
-                    // Step 3 — Error
-                    raise (SerdeCodecNotFoundException(
-                        $"No codec found for type '{ty.FullName}'. Register a codec in the CodecRegistry, add a [<Serde(Codec = typeof<...>)>] attribute, or add a [<JsonCodec(typeof<...>)>] attribute.",
-                        ty))
+                    // Step 3 — Generic factory (e.g. Set<_>, List<_>)
+                    if ty.IsGenericType then
+                        let genericDef = ty.GetGenericTypeDefinition()
+                        match CodecRegistry.tryFindFactory genericDef registry with
+                        | Some factory ->
+                            let codec = factory (ty.GetGenericArguments()) registry
+                            codec
+                        | None ->
+                            raise (SerdeCodecNotFoundException(
+                                $"No codec found for type '{ty.FullName}'. Register a codec in the CodecRegistry, add a [<Serde(Codec = typeof<...>)>] attribute, or add a [<JsonCodec(typeof<...>)>] attribute.",
+                                ty))
+                    else
+                        // Step 4 — Error
+                        raise (SerdeCodecNotFoundException(
+                            $"No codec found for type '{ty.FullName}'. Register a codec in the CodecRegistry, add a [<Serde(Codec = typeof<...>)>] attribute, or add a [<JsonCodec(typeof<...>)>] attribute.",
+                            ty))

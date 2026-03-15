@@ -255,6 +255,45 @@ let ``withPrimitives returns None for unregistered types`` () =
     let registry = CodecRegistry.withPrimitives ()
     Assert.IsTrue((CodecRegistry.tryFind typeof<char> registry).IsNone)
 
+// -- Set codec tests --
+
+[<Test>]
+let ``setCodec encodes Set<int> as JSON array`` () =
+    let codec = CollectionCodecs.setCodec PrimitiveCodecs.intCodec
+    let result = codec.Encode (Set.ofList [3; 1; 2])
+    Assert.AreEqual(Array [Number 1m; Number 2m; Number 3m], result)
+
+[<Test>]
+let ``setCodec decodes JSON array to Set<int>`` () =
+    let codec = CollectionCodecs.setCodec PrimitiveCodecs.intCodec
+    let result = codec.Decode (Array [Number 1m; Number 2m; Number 3m])
+    Assert.AreEqual(Set.ofList [1; 2; 3], result)
+
+[<Test>]
+let ``setCodec round-trips Set<int>`` () =
+    let codec = CollectionCodecs.setCodec PrimitiveCodecs.intCodec
+    let original = Set.ofList [1; 2; 3]
+    Assert.AreEqual(original, codec.Decode(codec.Encode original))
+
+[<Test>]
+let ``setCodec round-trips Set<string>`` () =
+    let codec = CollectionCodecs.setCodec PrimitiveCodecs.stringCodec
+    let original = Set.ofList ["apple"; "banana"; "cherry"]
+    Assert.AreEqual(original, codec.Decode(codec.Encode original))
+
+[<Test>]
+let ``setCodec round-trips empty set`` () =
+    let codec = CollectionCodecs.setCodec PrimitiveCodecs.intCodec
+    let original = Set.empty<int>
+    Assert.AreEqual(original, codec.Decode(codec.Encode original))
+
+[<Test>]
+let ``setCodec throws on non-array JSON`` () =
+    let codec = CollectionCodecs.setCodec PrimitiveCodecs.intCodec
+    Assert.Throws<exn>(fun () ->
+        codec.Decode (String "not an array") |> ignore
+    ) |> ignore
+
 // -- GlobalCodecRegistry tests --
 
 [<Test>]

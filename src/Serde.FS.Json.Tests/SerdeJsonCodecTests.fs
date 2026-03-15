@@ -133,6 +133,47 @@ let ``serialize unregistered type throws SerdeCodecNotFoundException`` () =
     ) |> ignore
 
 // ---------------------------------------------------------------------------
+// Set<'T> codec tests
+// ---------------------------------------------------------------------------
+
+[<Test>]
+let ``serialize Set<int> produces JSON array`` () =
+    let json = SerdeJson.serialize (Set.ofList [3; 1; 2])
+    Assert.AreEqual("[1,2,3]", json)
+
+[<Test>]
+let ``deserialize JSON array to Set<int>`` () =
+    let result = SerdeJson.deserialize<Set<int>> "[3, 1, 2]"
+    Assert.AreEqual(Set.ofList [1; 2; 3], result)
+
+[<Test>]
+let ``Set<int> round-trips via SerdeJson`` () =
+    let original = Set.ofList [1; 2; 3]
+    let json = SerdeJson.serialize original
+    let result = SerdeJson.deserialize<Set<int>> json
+    Assert.AreEqual(original, result)
+
+[<Test>]
+let ``Set<string> round-trips via SerdeJson`` () =
+    let original = Set.ofList ["apple"; "banana"; "cherry"]
+    let json = SerdeJson.serialize original
+    let result = SerdeJson.deserialize<Set<string>> json
+    Assert.AreEqual(original, result)
+
+[<Test>]
+let ``empty Set<int> round-trips via SerdeJson`` () =
+    let original = Set.empty<int>
+    let json = SerdeJson.serialize original
+    let result = SerdeJson.deserialize<Set<int>> json
+    Assert.AreEqual(original, result)
+
+[<Test>]
+let ``deserialize non-array JSON for Set<int> throws`` () =
+    Assert.Throws<exn>(fun () ->
+        SerdeJson.deserialize<Set<int>> "42" |> ignore
+    ) |> ignore
+
+// ---------------------------------------------------------------------------
 // Custom codec via registry
 // ---------------------------------------------------------------------------
 

@@ -3,25 +3,43 @@ namespace Serde.FS.Json.Codec
 open System
 open System.Collections.Generic
 
+/// Factory that constructs a codec for a constructed generic type.
+/// Receives the type arguments and the registry (for recursive resolution).
+type CodecFactory = Type[] -> CodecRegistry -> IJsonCodec
+
 /// Immutable codec registry that maps types to codecs.
-type CodecRegistry =
-    { Codecs: Dictionary<Type, IJsonCodec> }
+and CodecRegistry =
+    { Codecs: Dictionary<Type, IJsonCodec>
+      Factories: Dictionary<Type, CodecFactory> }
 
 module CodecRegistry =
     /// Creates an empty registry.
     let empty : CodecRegistry =
-        { Codecs = Dictionary<Type, IJsonCodec>() }
+        { Codecs = Dictionary<Type, IJsonCodec>()
+          Factories = Dictionary<Type, CodecFactory>() }
 
     /// Registers a codec for the given type. Last write wins.
     let add (ty: Type, codec: IJsonCodec) (registry: CodecRegistry) : CodecRegistry =
         let newCodecs = Dictionary<Type, IJsonCodec>(registry.Codecs)
         newCodecs[ty] <- codec
-        { Codecs = newCodecs }
+        { registry with Codecs = newCodecs }
+
+    /// Registers a factory for a generic type definition (e.g. Set<_>).
+    let addFactory (genericDef: Type, factory: CodecFactory) (registry: CodecRegistry) : CodecRegistry =
+        let newFactories = Dictionary<Type, CodecFactory>(registry.Factories)
+        newFactories[genericDef] <- factory
+        { registry with Factories = newFactories }
 
     /// Looks up a codec by type.
     let tryFind (ty: Type) (registry: CodecRegistry) : IJsonCodec option =
         match registry.Codecs.TryGetValue(ty) with
         | true, codec -> Some codec
+        | _ -> None
+
+    /// Looks up a factory by generic type definition.
+    let tryFindFactory (genericDef: Type) (registry: CodecRegistry) : CodecFactory option =
+        match registry.Factories.TryGetValue(genericDef) with
+        | true, factory -> Some factory
         | _ -> None
 
     /// Creates a registry pre-populated with all primitive codecs.
@@ -40,7 +58,3 @@ module CodecRegistry =
         |> add (typeof<DateTimeOffset>, PrimitiveCodecs.dateTimeOffsetCodec |> JsonCodec.boxCodec)
         |> add (typeof<DateOnly>, PrimitiveCodecs.dateOnlyCodec |> JsonCodec.boxCodec)
         |> add (typeof<TimeOnly>, PrimitiveCodecs.timeOnlyCodec |> JsonCodec.boxCodec)
-
-/// Global mutable registry for framework and app-level registration.
-module GlobalCodecRegistry =
-    let mutable Current : CodecRegistry = CodecRegistry.withPrimitives ()

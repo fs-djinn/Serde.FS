@@ -3,6 +3,7 @@ module SampleApp
 open System.Text.Json.Nodes
 open Serde.FS
 open Serde.FS.Json
+open Serde.FS.Json.Codec
 open FSharp.SourceDjinn.TypeModel
 
 // -----------------------------
@@ -35,16 +36,35 @@ type Shape =
 // Custom Converter Example
 // -----------------------------
 
-type UppercaseNameConverter() =
-    interface ISerdeConverter<FancyName> with
-        member _.Serialize(n: FancyName) =
-            JsonValue.Create(n.Value.ToUpperInvariant()) :> JsonNode
+// Custom codec that uppercases on encode and lowercases on decode
+type FancyNameCodec() =
+    interface IJsonCodec<FancyName> with
+        member _.Encode(n: FancyName) =
+            JsonValue.String(n.Value.ToUpperInvariant())
 
-        member _.Deserialize(node: JsonNode) =
-            { Value = node.GetValue<string>().ToLowerInvariant() }
+        member _.Decode(json: JsonValue) =
+            match json with
+            | JsonValue.String s -> { Value = s.ToLowerInvariant() }
+            | _ -> failwith "Expected JSON string for FancyName"
 
-and [<Serde(Converter = typeof<UppercaseNameConverter>)>]
-    FancyName = { Value: string }
+// Attach the codec to the type
+
+and 
+    [<Serde(Codec = typeof<FancyNameCodec>)>]
+    FancyName = { Value : string }
+
+
+//type UppercaseNameConverter() =
+//    interface ISerdeConverter<FancyName> with
+//        member _.Serialize(n: FancyName) =
+//            JsonValue.Create(n.Value.ToUpperInvariant()) :> JsonNode
+
+//        member _.Deserialize(node: JsonNode) =
+//            { Value = node.GetValue<string>().ToLowerInvariant() }
+
+//and [<Serde(Converter = typeof<UppercaseNameConverter>)>]
+//[<Serde>]
+//type FancyName = { Value: string }
 
 // -----------------------------
 // Generic Wrapper Example
