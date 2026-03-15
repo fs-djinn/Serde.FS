@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+		<!-- This project is a packable Serde backend library -->
+		<IsPackable>true</IsPackable>
+
+		<PackageId>Serde.FS.SystemTextJson</PackageId>
+		<Version>$(SerdeStjVersion)</Version>
+		<Authors>Jordan Marr</Authors>
+		<Description>
+			System.Text.Json backend for Serde.FS — provides a resolver and generated metadata for integrating Serde-based types with System.Text.Json and ASP.NET Core.
+		</Description>
+
+		<PackageTags>fsharp;serde;system-text-json;stj;aspnetcore;serialization;fs-djinn</PackageTags>
+
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="GeneratedSerdeStjResolver.fs" />
+		<Compile Include="Resolver.fs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Runtime dependency on System.Text.Json -->
+		<PackageReference Include="System.Text.Json" Version="10.0.3" />
+
+		<!-- Core Serde.FS runtime library -->
+		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Update="FSharp.Core" Version="10.0.103" />
+	</ItemGroup>
+
+</Project>
