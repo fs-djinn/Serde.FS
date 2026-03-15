@@ -37,4 +37,18 @@
 		<PackageReference Update="FSharp.Core" Version="10.0.103" />
 	</ItemGroup>
 
+	<!-- Console host: publish output goes to tools/net9.0/ -->
+	<ItemGroup>
+		<Content Include="..\Serde.FS.SystemTextJson.GeneratorHost\bin\$(Configuration)\net9.0\publish\**\*"
+				 PackagePath="tools/net9.0/"
+				 CopyToOutputDirectory="Never"
+				 Visible="false" />
+	</ItemGroup>
+
+	<!-- build + buildTransitive ensure consumers automatically get the MSBuild targets -->
+	<ItemGroup>
+		<None Include="build\Serde.FS.SystemTextJson.targets" Pack="true" PackagePath="build" Link="build\Serde.FS.SystemTextJson.targets" />
+		<None Include="buildTransitive\Serde.FS.SystemTextJson.targets" Pack="true" PackagePath="buildTransitive" Link="buildTransitive\Serde.FS.SystemTextJson.targets" />
+	</ItemGroup>
+
 </Project>

@@ -10,8 +10,10 @@ open Fun.Build
 
 let serdeFSProj       = "src/Serde.FS/Serde.FS.fsproj"
 let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
-let generatorHostProj = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
+let generatorHostProj    = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
+let stjGeneratorHostProj = "src/Serde.FS.SystemTextJson.GeneratorHost/Serde.FS.SystemTextJson.GeneratorHost.fsproj"
 let stjProj           = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
+let stjSystemTextJsonProj = "src/Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj"
 let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
 let sourceGenTestProj = "src/Serde.FS.SourceGen.Tests/Serde.FS.SourceGen.Tests.fsproj"
 let jsonTestProj      = "src/Serde.FS.Json.Tests/Serde.FS.Json.Tests.fsproj"
@@ -33,6 +35,7 @@ let readProp (propName: string) =
 let stableSerdeFSVersion     = readProp "SerdeFSVersion"
 let stableSourceGenVersion   = readProp "SourceGenVersion"
 let stableSerdeJsonVersion   = readProp "SerdeJsonVersion"
+let stableSerdeStjVersion    = readProp "SerdeStjVersion"
 
 let timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmss")
 
@@ -51,6 +54,7 @@ pipeline "debug" {
             printfn $"Stable Serde.FS:       {stableSerdeFSVersion}"
             printfn $"Stable SourceGen:      {stableSourceGenVersion}"
             printfn $"Stable Serde.FS.Json:  {stableSerdeJsonVersion}"
+            printfn $"Stable Serde.FS.STJ:   {stableSerdeStjVersion}"
             printfn $"Timestamp:             {timestamp}"
             printfn $"Debug version:         {debugVersion}"
         )
@@ -72,7 +76,7 @@ pipeline "debug" {
             printfn "Local feed pruned."
 
             let globalPkgs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages")
-            for pkgName in [ "serde.fs"; "serde.fs.sourcegen"; "serde.fs.json" ] do
+            for pkgName in [ "serde.fs"; "serde.fs.sourcegen"; "serde.fs.json"; "serde.fs.systemtextjson" ] do
                 let pkgDir = Path.Combine(globalPkgs, pkgName)
                 if Directory.Exists(pkgDir) then
                     for versionDir in Directory.GetDirectories(pkgDir) do
@@ -100,8 +104,9 @@ pipeline "debug" {
         run $"dotnet pack {serdeFSProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion}"
     }
 
-    stage "Publish GeneratorHost" {
+    stage "Publish GeneratorHosts" {
         run $"dotnet publish {generatorHostProj} -c Debug"
+        run $"dotnet publish {stjGeneratorHostProj} -c Debug"
     }
 
     stage "Pack Serde.FS.Json" {
@@ -109,6 +114,13 @@ pipeline "debug" {
         run $"dotnet clean {stjProj}"
         run $"dotnet build {stjProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
         run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
+    }
+
+    stage "Pack Serde.FS.SystemTextJson" {
+        run $"dotnet restore {stjSystemTextJsonProj} --no-cache /p:SerdeFSVersion={debugVersion}"
+        run $"dotnet clean {stjSystemTextJsonProj}"
+        run $"dotnet build {stjSystemTextJsonProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SerdeStjVersion={debugVersion}"
+        run $"dotnet pack {stjSystemTextJsonProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SerdeStjVersion={debugVersion}"
     }
 
     stage "Run tests" {
@@ -122,11 +134,12 @@ pipeline "debug" {
             let content = $"""<Project>
   <PropertyGroup>
     <SerdeJsonVersion>{debugVersion}</SerdeJsonVersion>
+    <SerdeStjVersion>{debugVersion}</SerdeStjVersion>
   </PropertyGroup>
 </Project>
 """
             File.WriteAllText(propsPath, content)
-            printfn $"  Wrote {propsPath} with SerdeJsonVersion={debugVersion}"
+            printfn $"  Wrote {propsPath} with SerdeJsonVersion={debugVersion}, SerdeStjVersion={debugVersion}"
         )
     }
 
@@ -150,6 +163,7 @@ pipeline "debug" {
             printfn $"    Serde.FS                  {debugVersion}"
             printfn $"    Serde.FS.SourceGen        {debugVersion}"
             printfn $"    Serde.FS.Json             {debugVersion}"
+            printfn $"    Serde.FS.SystemTextJson   {debugVersion}"
             printfn $"  Restore source:     .nuget-local (--no-cache)"
             printfn $"  SampleApp resolved: {debugVersion}"
             printfn "========================================"
