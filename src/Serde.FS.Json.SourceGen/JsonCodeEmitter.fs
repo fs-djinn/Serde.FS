@@ -592,10 +592,11 @@ type JsonCodeEmitter() =
                 "\n" +
                 "module ResolverRegistration =\n" +
                 "    let mutable private initialized = false\n" +
-                "    let registerAll() =\n" +
+                "    let registerAll() : obj =\n" +
                 "        if not initialized then\n" +
                 "            initialized <- true\n" +
                 "            SerdeJsonResolver.register()\n" +
+                "        null\n" +
                 "\n" +
                 "namespace Djinn.Generated\n" +
                 "\n" +
