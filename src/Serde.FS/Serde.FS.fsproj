@@ -33,4 +33,9 @@
 	  <PackageReference Update="FSharp.Core" Version="10.0.103" />
 	</ItemGroup>
 
+	<!-- Clean target: removes obj/serde-generated on dotnet clean -->
+	<ItemGroup>
+	  <None Include="buildTransitive\Serde.FS.targets" Pack="true" PackagePath="buildTransitive\" />
+	</ItemGroup>
+
 </Project>
