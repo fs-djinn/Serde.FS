@@ -197,8 +197,10 @@ let ``EmitResolver produces valid consolidated file for multiple types`` () =
     Assert.That(code, Does.Contain("personJsonCodec"))
     Assert.That(code, Does.Contain("addressJsonCodec"))
     Assert.That(code, Does.Contain("CodecRegistry.add"))
-    Assert.That(code, Does.Contain("let private register"))
-    Assert.That(code, Does.Contain("SerdeJson.registerCodecs register"))
+    Assert.That(code, Does.Contain("let internal register"))
+    Assert.That(code, Does.Contain("Djinn.Generated"))
+    Assert.That(code, Does.Contain("Bootstrap"))
+    Assert.That(code, Does.Contain("SerdeJson.registerCodecs"))
 
 [<Test>]
 let ``EmitResolver returns None for empty list`` () =
@@ -257,8 +259,10 @@ let ``EmitResolver with mixed record and option types`` () =
     Assert.That(code, Does.Contain("typeof<string option>"))
     Assert.That(code, Does.Contain("personJsonCodec"))
     Assert.That(code, Does.Contain("stringOptionJsonCodec"))
-    Assert.That(code, Does.Contain("let private register"))
-    Assert.That(code, Does.Contain("SerdeJson.registerCodecs register"))
+    Assert.That(code, Does.Contain("let internal register"))
+    Assert.That(code, Does.Contain("Djinn.Generated"))
+    Assert.That(code, Does.Contain("Bootstrap"))
+    Assert.That(code, Does.Contain("SerdeJson.registerCodecs"))
 
 [<Test>]
 let ``Emits fully-qualified type for nested record field`` () =
@@ -379,8 +383,10 @@ let ``EmitResolver with mixed record option and tuple types`` () =
     Assert.That(code, Does.Contain("personJsonCodec"))
     Assert.That(code, Does.Contain("stringOptionJsonCodec"))
     Assert.That(code, Does.Contain("intStringTupleJsonCodec"))
-    Assert.That(code, Does.Contain("let private register"))
-    Assert.That(code, Does.Contain("SerdeJson.registerCodecs register"))
+    Assert.That(code, Does.Contain("let internal register"))
+    Assert.That(code, Does.Contain("Djinn.Generated"))
+    Assert.That(code, Does.Contain("Bootstrap"))
+    Assert.That(code, Does.Contain("SerdeJson.registerCodecs"))
 
 [<Test>]
 let ``typeInfoToPascalName produces IntStringTuple`` () =
@@ -482,7 +488,7 @@ let ``EmitResolver includes enum type`` () =
     let code = result.Value
     Assert.That(code, Does.Contain("typeof<TestNs.Color>"))
     Assert.That(code, Does.Contain("colorJsonCodec"))
-    Assert.That(code, Does.Contain("let private register"))
+    Assert.That(code, Does.Contain("let internal register"))
 
 [<Test>]
 let ``Full pipeline: parse then emit enum`` () =
@@ -691,7 +697,7 @@ let ``EmitResolver includes union type`` () =
     let code = result.Value
     Assert.That(code, Does.Contain("typeof<TestNs.Shape>"))
     Assert.That(code, Does.Contain("shapeJsonCodec"))
-    Assert.That(code, Does.Contain("let private register"))
+    Assert.That(code, Does.Contain("let internal register"))
 
 [<Test>]
 let ``Full pipeline: parse then emit union`` () =

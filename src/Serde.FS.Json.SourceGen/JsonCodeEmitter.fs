@@ -614,8 +614,8 @@ module internal JsonCodeEmitterImpl =
                 append $"    let private _fieldCodec_%s{safeName} : IJsonCodec<%s{fsharpType}> = %s{codecFqn}() :> IJsonCodec<%s{fsharpType}>"
                 append ""
 
-            // Emit the pure register function
-            append "    let private register (reg: CodecRegistry) : CodecRegistry ="
+            // Emit the pure register function (internal so Bootstrap class can access it)
+            append "    let internal register (reg: CodecRegistry) : CodecRegistry ="
             append "        reg"
 
             // Register field-level codecs first (they may be needed by type codecs)
@@ -637,8 +637,14 @@ module internal JsonCodeEmitterImpl =
                     append $"        |> CodecRegistry.add (typeof<%s{fqn}>, JsonCodec.boxCodec %s{fnName})"
             append ""
 
-            // Emit the registration side-effect
-            append "    do SerdeJson.registerCodecs register"
+            // Emit the Djinn convention bootstrap so that ~~EntryPoint.djinn.g.fs
+            // can discover and call init() before the user's entry point runs.
+            append "namespace Djinn.Generated"
+            append ""
+            append "type Bootstrap() ="
+            append "    static member init () ="
+            append "        Serde.Generated.SerdeJsonCodecs.register"
+            append "        |> Serde.FS.Json.SerdeJson.registerCodecs"
 
             Some (sb.ToString())
 

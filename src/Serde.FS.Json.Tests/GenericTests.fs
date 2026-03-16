@@ -128,4 +128,4 @@ let ``EmitResolver includes constructed generic types`` () =
     let code = result.Value
     Assert.That(code, Does.Contain("typeof<MyApp.Wrapper<MyApp.Person>>"))
     Assert.That(code, Does.Contain("wrapper_PersonJsonCodec"))
-    Assert.That(code, Does.Contain("let private register"))
+    Assert.That(code, Does.Contain("let internal register"))
