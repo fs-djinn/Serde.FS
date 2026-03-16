@@ -30,8 +30,8 @@ module CollectionCodecs =
 
             let setType = typedefof<Set<_>>.MakeGenericType(elemType)
             // FSharpSet<'T>.Create : IComparer<'T> -> seq<'T> -> FSharpSet<'T>
-            // Use the constructor: new FSharpSet<'T>(seq<'T>)
             let setOfSeqCtor = setType.GetConstructor([| typedefof<seq<_>>.MakeGenericType(elemType) |])
+            // Use the constructor: new FSharpSet<'T>(seq<'T>)
 
             { new IJsonCodec with
                 member _.Type = setType

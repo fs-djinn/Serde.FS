@@ -29,9 +29,9 @@
 		<Compile Include="Codec\JsonCodec.fs" />
 		<Compile Include="Codec\PrimitiveCodecs.fs" />
 		<Compile Include="Codec\CodecRegistry.fs" />
-		<Compile Include="codec\JsonCodecRegistry.fs" />
 		<Compile Include="Codec\CodecResolver.fs" />
 		<Compile Include="Codec\CollectionCodecs.fs" />
+		<Compile Include="codec\JsonCodecRegistry.fs" />
 		<Compile Include="Codec\GlobalCodecRegistry.fs" />
 		<Compile Include="Codec\SerdeJsonWriter.fs" />
 		<Compile Include="Codec\SerdeJsonReader.fs" />
