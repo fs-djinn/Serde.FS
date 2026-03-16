@@ -53,16 +53,11 @@ let main argv =
                 | _ -> File.WriteAllText(outputFile, source.Code)
                 generatedFiles.Add outputFile |> ignore
 
-            // Remove stale generated files
+            // Remove stale generated files (only STJ-owned suffixes)
             if Directory.Exists outputDir then
-                for ext in ["*.stj.g.fs"; "*.djinn.g.fs"] do
+                for ext in ["*.stj.g.fs"] do
                     for existingFile in Directory.GetFiles(outputDir, ext) do
                         if not (generatedFiles.Contains existingFile) then
                             File.Delete existingFile
-                // Remove any leftover JSON resolver files from prior runs
-                for staleFile in ["~SerdeResolver.serde.g.fs"; "~SerdeResolverRegistration.djinn.g.fs"] do
-                    let path = Path.Combine(outputDir, staleFile)
-                    if File.Exists path && not (generatedFiles.Contains path) then
-                        File.Delete path
 
             0

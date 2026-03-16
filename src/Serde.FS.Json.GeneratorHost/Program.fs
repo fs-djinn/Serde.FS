@@ -51,9 +51,9 @@ let main argv =
                 | _ -> File.WriteAllText(outputFile, source.Code)
                 generatedFiles.Add outputFile |> ignore
 
-            // Remove stale generated files
+            // Remove stale generated files (only JSON-owned suffixes)
             if Directory.Exists outputDir then
-                for ext in ["*.serde.g.fs"; "*.djinn.g.fs"; "*.json.g.fs"] do
+                for ext in ["*.json.g.fs"] do
                     for existingFile in Directory.GetFiles(outputDir, ext) do
                         if not (generatedFiles.Contains existingFile) then
                             File.Delete existingFile
