@@ -21,7 +21,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="GeneratedSerdeStjResolver.fs" />
 		<Compile Include="Resolver.fs" />
 	</ItemGroup>
 
