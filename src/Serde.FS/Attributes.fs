@@ -6,7 +6,6 @@ open System
 [<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Struct ||| AttributeTargets.Interface ||| AttributeTargets.Enum, AllowMultiple = false)>]
 type SerdeAttribute() =
     inherit Attribute()
-    member val Converter : obj = null with get, set
     member val Codec : Type = null with get, set
 
 /// Marks a type for serialization code generation only.
