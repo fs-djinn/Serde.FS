@@ -1,5 +1,6 @@
 namespace Serde.FS.SystemTextJson
 
+open System.Text.Json
 open System.Text.Json.Serialization.Metadata
 
 /// Collects IJsonTypeInfoResolver instances registered by IBootstrap implementations at startup.
@@ -12,4 +13,13 @@ module Resolver =
         resolvers.Add(r)
 
     let get () =
-        JsonTypeInfoResolver.Combine(resolvers.ToArray())
+        let builtIn = DefaultJsonTypeInfoResolver() :> IJsonTypeInfoResolver
+        let generated = JsonTypeInfoResolver.Combine(resolvers.ToArray())
+        JsonTypeInfoResolver.Combine(builtIn, generated)
+
+    /// Creates a JsonSerializerOptions instance using the given defaults, 
+    /// attaches the full resolver chain, and returns the configured options.
+    let createOptions (defaults : JsonSerializerDefaults) =
+        let options = JsonSerializerOptions(defaults)
+        options.TypeInfoResolver <- get ()
+        options
