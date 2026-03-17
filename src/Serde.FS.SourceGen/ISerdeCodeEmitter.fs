@@ -2,6 +2,8 @@ namespace Serde.FS
 
 type ISerdeCodeEmitter =
     abstract member Emit : SerdeTypeInfo -> string
+    /// File suffix for per-type generated files (e.g. "json", "stj"). Produces "{TypeName}.{suffix}.g.fs".
+    abstract member HintNameSuffix : string
 
 type ISerdeResolverEmitter =
     abstract member EmitResolver : SerdeTypeInfo list -> string option

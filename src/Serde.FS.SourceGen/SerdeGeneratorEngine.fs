@@ -482,7 +482,7 @@ module SerdeGeneratorEngine =
                             sprintf "%s_%s" typeInfo.Raw.TypeName (String.concat "" argNames)
                         | None -> typeInfo.Raw.TypeName
                     let code = SerdeCodeEmitter.emit emitter typeInfo
-                    generatedSources.Add({ HintName = sprintf "%s.serde.g.fs" fileName; Code = code })
+                    generatedSources.Add({ HintName = sprintf "%s.%s.g.fs" fileName emitter.HintNameSuffix; Code = code })
                 allTypes.Add(typeInfo)
 
             // Discover and emit option types from record fields
@@ -492,7 +492,7 @@ module SerdeGeneratorEngine =
                 if emitPerTypeFiles then
                     let code = SerdeCodeEmitter.emit emitter optSerdeInfo
                     let pascalName = typeInfoToPascalName optTi
-                    generatedSources.Add({ HintName = sprintf "%s.serde.g.fs" pascalName; Code = code })
+                    generatedSources.Add({ HintName = sprintf "%s.%s.g.fs" pascalName emitter.HintNameSuffix; Code = code })
                 allTypes.Add(optSerdeInfo)
 
             // Discover and emit tuple types from record fields
@@ -502,7 +502,7 @@ module SerdeGeneratorEngine =
                 if emitPerTypeFiles then
                     let code = SerdeCodeEmitter.emit emitter tupSerdeInfo
                     let pascalName = typeInfoToPascalName tupTi
-                    generatedSources.Add({ HintName = sprintf "%s.serde.g.fs" pascalName; Code = code })
+                    generatedSources.Add({ HintName = sprintf "%s.%s.g.fs" pascalName emitter.HintNameSuffix; Code = code })
                 allTypes.Add(tupSerdeInfo)
 
             // Emit resolver file if the emitter supports it

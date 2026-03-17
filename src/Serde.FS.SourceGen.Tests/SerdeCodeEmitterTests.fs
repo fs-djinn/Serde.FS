@@ -8,6 +8,7 @@ open Serde.FS.SourceGen
 type FakeEmitter() =
     interface ISerdeCodeEmitter with
         member _.Emit(info) = sprintf "FAKE: %s" info.Raw.TypeName
+        member _.HintNameSuffix = "fake"
 
 [<Test>]
 let ``CodeEmitter delegates to ISerdeCodeEmitter`` () =

@@ -652,6 +652,7 @@ module internal JsonCodeEmitterImpl =
 type JsonCodeEmitter() =
     interface ISerdeCodeEmitter with
         member _.Emit(info) = JsonCodeEmitterImpl.emit info
+        member _.HintNameSuffix = "json"
     interface ISerdeResolverEmitter with
         member _.EmitResolver(types) = JsonCodeEmitterImpl.emitConsolidatedFile types
         member _.ResolverHintName = "~SerdeJsonCodecs.json.g.fs"
