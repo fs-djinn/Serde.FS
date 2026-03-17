@@ -4,7 +4,8 @@
 		<SourceGenVersion>1.0.0-alpha.6</SourceGenVersion>
 		<SerdeJsonVersion>1.0.0-alpha.6</SerdeJsonVersion>
 		<SerdeStjVersion>1.0.0-alpha.1</SerdeStjVersion>
-		<SourceDjinnVersion>0.2.3</SourceDjinnVersion>
+		<SourceDjinnVersion>0.3.0</SourceDjinnVersion>
+		<SourceDjinnTypeModelVersion>0.3.0</SourceDjinnTypeModelVersion>
 	</PropertyGroup>
 
 	<PropertyGroup>

@@ -637,14 +637,15 @@ module internal JsonCodeEmitterImpl =
                     append $"        |> CodecRegistry.add (typeof<%s{fqn}>, JsonCodec.boxCodec %s{fnName})"
             append ""
 
-            // Emit the Djinn convention bootstrap so that ~~EntryPoint.djinn.g.fs
-            // can discover and call init() before the user's entry point runs.
-            append "namespace Djinn.Generated"
+            // Emit the IBootstrap implementation so that SourceDjinn's entry point
+            // can discover and call Init() before the user's entry point runs.
+            append "namespace Serde.Generated"
             append ""
-            append "type Bootstrap() ="
-            append "    static member init () ="
-            append "        Serde.Generated.SerdeJsonCodecs.register"
-            append "        |> Serde.FS.Json.SerdeJson.registerCodecs"
+            append "type JsonBootstrap() ="
+            append "    interface FSharp.SourceDjinn.TypeModel.IBootstrap with"
+            append "        member _.Init () ="
+            append "            Serde.Generated.SerdeJsonCodecs.register"
+            append "            |> Serde.FS.Json.SerdeJson.registerCodecs"
 
             Some (sb.ToString())
 

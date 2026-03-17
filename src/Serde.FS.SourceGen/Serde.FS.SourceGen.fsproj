@@ -52,7 +52,7 @@
 		<PackageReference Include="FSharp.SourceDjinn" Version="$(SourceDjinnVersion)" PrivateAssets="all" />
 
 		<!-- Runtime type model used by the generator -->
-		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
+		<PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="$(SourceDjinnTypeModelVersion)" />
 	</ItemGroup>
 
 	<!-- Analyzer payload: generator engine DLL + all dependencies -->

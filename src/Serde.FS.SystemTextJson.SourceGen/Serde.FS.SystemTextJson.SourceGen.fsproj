@@ -12,7 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj" />
     <ProjectReference Include="..\Serde.FS.SystemTextJson\Serde.FS.SystemTextJson.fsproj" />
-    <PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="0.2.2" />
+    <PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="$(SourceDjinnTypeModelVersion)" />
   </ItemGroup>
 
   <ItemGroup>
