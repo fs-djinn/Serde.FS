@@ -12,11 +12,16 @@ Serde.FS is a strict, deterministic, compile‑time–validated serialization fr
 - **No schema drift**  
 - **No surprises**  
 
-Every serialized type must explicitly opt in using `[<Serde>]`. Metadata is generated at design time, and backends use fast, predictable code at runtime.
+---
 
-Serde.FS.Json is the first backend. As of alpha.5 build, it now relies on its own _codec_ with _no dependency_ on System.Text.Json!
+## 📦 Backends
 
-Serde.FS.Json is powered by [FSharp.SourceDjinn](https://github.com/serde-fs/FSharp.SourceDjinn), a lightweight source generator engine.
+Serde.FS is backend‑agnostic. Today it ships with:
+
+- **Serde.FS.Json** — the native, reflection‑free JSON backend (recommended)
+- **Serde.FS.SystemTextJson** — optional compatibility backend built on System.Text.Json 🚧
+
+Most users will only need **Serde.FS.Json**.
 
 ---
 
@@ -265,3 +270,5 @@ It’s a different tool for a different philosophy.
 Serde.FS is inspired by the elegance and rigor of Rust Serde, adapted to the F# ecosystem with a focus on clarity, determinism, and developer experience.
 
 ---
+
+Serde.FS.Json is powered by [FSharp.SourceDjinn](https://github.com/serde-fs/FSharp.SourceDjinn), a lightweight source generator engine.
