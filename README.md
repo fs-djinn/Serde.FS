@@ -56,6 +56,15 @@ let person : Person = SerdeJson.deserialize json
 
 That’s the entire workflow: **opt in → generate → serialize**.
 
+### 4. Add EntryPoint
+
+If you are using Serde.FS in an app that needs an entry point, you must use the special `Serde.FS.EntryPoint` attribute:
+
+```fsharp
+[<Serde.FS.EntryPoint>]
+let main argv = ...
+```
+
 ---
 
 ## ✨ Key Features
