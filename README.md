@@ -45,7 +45,7 @@ type Person = {
 ```fsharp
 open Serde.FS.Json
 
-let json = SerdeJson.serialize { Name = "Jordan"; Age = 30 }
+let json = SerdeJson.serialize { Name = "Gustens"; Age = 14 }
 let person : Person = SerdeJson.deserialize json
 ```
 
@@ -133,28 +133,11 @@ Because Serde.FS uses source generation, it cannot safely generate the real entr
 To solve this, mark your intended entry point with:  
  
 ```fsharp
-[<FSharp.SourceDjinn.TypeModel.EntryPoint>]
+[<Serde.FS.EntryPoint>]
 let main argv = ...
 ```  
  
-SourceDjinn will generate the actual `[<EntryPoint>]` wrapper in a separate file so it appears in the correct place in the compilation order.
-
----
-
-
-## 🧩 How It Works
-
-```
-F# source
-   ↓
-[<Serde>] attributes
-   ↓
-FSharp.SourceDjinn extracts metadata
-   ↓
-Serde.FS.SourceGen validates + generates serializers
-   ↓
-Serde.FS.Json uses generated code at runtime
-```
+Serde.FS will generate the actual `[<EntryPoint>]` wrapper in a separate file so it appears in the correct place in the compilation order.
 
 ---
 
