@@ -19,13 +19,38 @@ let main argv =
             Directory.CreateDirectory outputDir |> ignore
 
         // Discover all .fs source files (excluding generated files)
-        let sourceFiles =
+        let localSourceFiles =
             Directory.GetFiles(projectDir, "*.fs", SearchOption.TopDirectoryOnly)
             |> Array.filter (fun f ->
                 let name = Path.GetFileName(f)
                 not (name.EndsWith(".serde.g.fs")) && not (name.EndsWith(".djinn.g.fs")) && not (name.EndsWith(".json.g.fs")))
             |> Array.map (fun f -> f, File.ReadAllText f)
             |> Array.toList
+
+        // Read referenced project source files (for [<RpcApi>] discovery)
+        let localFullPaths =
+            localSourceFiles
+            |> List.map (fun (f, _) -> Path.GetFullPath(f).ToLowerInvariant())
+            |> Set.ofList
+
+        let refSourceFiles =
+            if argv.Length > 2 && not (System.String.IsNullOrWhiteSpace(argv[2])) then
+                argv[2].Split(';', System.StringSplitOptions.RemoveEmptyEntries)
+                |> Array.filter (fun f ->
+                    f.EndsWith(".fs") && File.Exists(f))
+                |> Array.filter (fun f ->
+                    let name = Path.GetFileName(f)
+                    not (name.EndsWith(".serde.g.fs"))
+                    && not (name.EndsWith(".djinn.g.fs"))
+                    && not (name.EndsWith(".json.g.fs")))
+                // Exclude files already in local sources (dedup against MSBuild glob misfires)
+                |> Array.filter (fun f ->
+                    not (localFullPaths.Contains(Path.GetFullPath(f).ToLowerInvariant())))
+                |> Array.map (fun f -> f, File.ReadAllText f)
+                |> Array.toList
+            else []
+
+        let sourceFiles = localSourceFiles @ refSourceFiles
 
         let emitter = JsonCodeEmitter() :> Serde.FS.ISerdeCodeEmitter
         let result = SerdeGeneratorEngine.generate sourceFiles emitter

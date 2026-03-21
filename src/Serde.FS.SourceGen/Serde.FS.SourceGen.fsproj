@@ -39,6 +39,7 @@
 		<Compile Include="SerdeAstParser.fs" />
 		<Compile Include="SerdeCodeEmitter.fs" />
 		<Compile Include="RootGenericDiagnostics.fs" />
+		<Compile Include="RpcApiDiscovery.fs" />
 		<Compile Include="SerdeGeneratorEngine.fs" />
 		<!-- Roslyn ISourceGenerator stub — excluded until F# supports source generators -->
 		<!-- <Compile Include="SerdeSourceGenerator.fs" /> -->

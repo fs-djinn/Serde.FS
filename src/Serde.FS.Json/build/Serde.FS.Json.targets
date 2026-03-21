@@ -1,6 +1,22 @@
 <Project>
+	<!-- Collect .fs source files from referenced projects for [<RpcApi>] discovery -->
+	<Target Name="SerdeCollectRefSources" BeforeTargets="SerdeGenerate"
+			Condition="'@(ProjectReference)' != ''">
+		<ItemGroup>
+			<_SerdeRefProjectDir Include="@(ProjectReference->'%(RootDir)%(Directory)')" />
+		</ItemGroup>
+		<CreateItem Include="%(_SerdeRefProjectDir.Identity)**\*.fs"
+					Exclude="%(_SerdeRefProjectDir.Identity)obj\**;%(_SerdeRefProjectDir.Identity)bin\**"
+					Condition="'%(_SerdeRefProjectDir.Identity)' != ''">
+			<Output TaskParameter="Include" ItemName="_SerdeRefSourceFile" />
+		</CreateItem>
+		<PropertyGroup>
+			<_SerdeRefSourceList>@(_SerdeRefSourceFile, ';')</_SerdeRefSourceList>
+		</PropertyGroup>
+	</Target>
+
 	<Target Name="SerdeGenerate" BeforeTargets="CoreCompile">
-		<Exec Command="dotnet &quot;$(MSBuildThisFileDirectory)../tools/net9.0/Serde.FS.Json.GeneratorHost.dll&quot; &quot;$(ProjectDir).&quot; &quot;$(IntermediateOutputPath)serde-generated&quot;" />
+		<Exec Command="dotnet &quot;$(MSBuildThisFileDirectory)../tools/net9.0/Serde.FS.Json.GeneratorHost.dll&quot; &quot;$(ProjectDir).&quot; &quot;$(IntermediateOutputPath)serde-generated&quot; &quot;$(_SerdeRefSourceList)&quot;" />
 
 		<ItemGroup>
 			<Compile Include="$(IntermediateOutputPath)serde-generated/**/*.fs"

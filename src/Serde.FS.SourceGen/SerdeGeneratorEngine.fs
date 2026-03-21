@@ -301,6 +301,16 @@ module SerdeGeneratorEngine =
                 with ex ->
                     warnings.Add(sprintf "Serde: Failed to process %s: %s" filePath ex.Message)
 
+        // Phase 1.5: Discover types from [<RpcApi>] interfaces
+        let existingTypeNames =
+            parsedTypes
+            |> Seq.map (fun t -> t.Raw.TypeName)
+            |> Set.ofSeq
+        let rpcApiTypes =
+            RpcApiDiscovery.discover (Seq.toList allTypeInfos) sourceFiles
+            |> List.filter (fun t -> not (existingTypeNames.Contains t.Raw.TypeName))
+        parsedTypes.AddRange(rpcApiTypes)
+
         // Phase 2: Resolve field type references across all parsed types
         let lookup =
             allTypeInfos

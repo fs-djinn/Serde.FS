@@ -44,6 +44,12 @@ type SerdeFieldAttribute() =
 [<AttributeUsage(AttributeTargets.Method, AllowMultiple = false)>]
 type EntryPointAttribute() = inherit Attribute()
 
+/// Marks an interface as an RPC API contract. The source generator will walk
+/// all abstract member signatures and generate codecs for every type in the
+/// transitive closure, without requiring [<Serde>] on those types.
+[<AttributeUsage(AttributeTargets.Interface, AllowMultiple = false)>]
+type RpcApiAttribute() = inherit Attribute()
+
 /// Defines a discoverable bootstrap that will be automatically run during the entry point startup sequence.
 type IEntryPointBootstrap =
     abstract member Init : unit -> unit
