@@ -156,4 +156,31 @@ let run argv =
     printfn "Person JSON: %s" personJson
     printfn "Person roundtrip: %A" personRoundtrip
 
+    // -----------------------------------------
+    // 4. RpcApi Discovery Example (SampleRpc)
+    // -----------------------------------------
+    let order : SampleRpc.Order = {
+        Id = 1
+        Lines = [
+            { Product = { Id = { Value = 42 }; Name = "Widget"; Price = 9.99m; Tags = ["sale"; "new"] }
+              Quantity = 3 }
+            { Product = { Id = { Value = 99 }; Name = "Gadget"; Price = 24.50m; Tags = [] }
+              Quantity = 1 }
+        ]
+        Notes = Some "Rush delivery"
+    }
+
+    let orderJson = SerdeJson.serialize order
+    let orderRoundtrip : SampleRpc.Order = SerdeJson.deserialize orderJson
+
+    printfn "Order JSON: %s" orderJson
+    printfn "Order roundtrip: %A" orderRoundtrip
+
+    let summary : SampleRpc.OrderSummary = { OrderId = 1; TotalItems = 4; TotalPrice = 54.47m }
+    let summaryJson = SerdeJson.serialize summary
+    let summaryRoundtrip : SampleRpc.OrderSummary = SerdeJson.deserialize summaryJson
+
+    printfn "Summary JSON: %s" summaryJson
+    printfn "Summary roundtrip: %A" summaryRoundtrip
+
     0

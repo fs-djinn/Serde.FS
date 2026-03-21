@@ -19,6 +19,7 @@
     <Project Path="Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj">
       <Build Solution="Debug|*" Project="false" />
     </Project>
+    <Project Path="Serde.FS.Json.SampleRpc/Serde.FS.Json.SampleRpc.fsproj" />
     <Project Path="Serde.FS.Json.Tests/Serde.FS.Json.Tests.fsproj">
       <Build Solution="Debug|*" Project="false" />
     </Project>

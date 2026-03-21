@@ -14,6 +14,7 @@ let generatorHostProj    = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.Genera
 let stjGeneratorHostProj = "src/Serde.FS.SystemTextJson.GeneratorHost/Serde.FS.SystemTextJson.GeneratorHost.fsproj"
 let stjProj           = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
 let stjSystemTextJsonProj = "src/Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj"
+let sampleRpcProj     = "src/Serde.FS.Json.SampleRpc/Serde.FS.Json.SampleRpc.fsproj"
 let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
 let sourceGenTestProj = "src/Serde.FS.SourceGen.Tests/Serde.FS.SourceGen.Tests.fsproj"
 let jsonTestProj      = "src/Serde.FS.Json.Tests/Serde.FS.Json.Tests.fsproj"
@@ -130,6 +131,18 @@ pipeline "debug" {
 
     stage "Write SampleApp version props" {
         run (fun _ ->
+            // SampleRpc references Serde.FS
+            let rpcPropsPath = Path.Combine(Path.GetDirectoryName(sampleRpcProj), "Directory.Build.props")
+            let rpcContent = $"""<Project>
+  <PropertyGroup>
+    <SerdeFSVersion>{debugVersion}</SerdeFSVersion>
+  </PropertyGroup>
+</Project>
+"""
+            File.WriteAllText(rpcPropsPath, rpcContent)
+            printfn $"  Wrote {rpcPropsPath} with SerdeFSVersion={debugVersion}"
+
+            // SampleApp references Serde.FS.Json
             let propsPath = Path.Combine(Path.GetDirectoryName(sampleAppProj), "Directory.Build.props")
             let content = $"""<Project>
   <PropertyGroup>
@@ -143,7 +156,8 @@ pipeline "debug" {
         )
     }
 
-    stage "Restore SampleApp" {
+    stage "Restore SampleRpc and SampleApp" {
+        run $"dotnet restore {sampleRpcProj} --no-cache"
         run $"dotnet restore {sampleAppProj} --no-cache"
     }
 
