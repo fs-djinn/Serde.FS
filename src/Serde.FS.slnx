@@ -16,11 +16,19 @@
     <Project Path="Serde.FS.SystemTextJson.SourceGen/Serde.FS.SystemTextJson.SourceGen.fsproj" />
     <Project Path="Serde.FS.SystemTextJson.GeneratorHost/Serde.FS.SystemTextJson.GeneratorHost.fsproj" />
   </Folder>
+  <Folder Name="/SampleRpc/">
+    <Project Path="Serde.FS.Json.SampleRpc.Shared/Serde.FS.Json.SampleRpc.Shared.fsproj" />
+    <Project Path="Serde.FS.Json.SampleRpc.Server/Serde.FS.Json.SampleRpc.Server.fsproj">
+      <Build Solution="Debug|*" Project="false" />
+    </Project>
+    <Project Path="Serde.FS.Json.SampleRpc.Client/Serde.FS.Json.SampleRpc.Client.fsproj">
+      <Build Solution="Debug|*" Project="false" />
+    </Project>
+  </Folder>
   <Folder Name="/_Tests/">
     <Project Path="Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj">
       <Build Solution="Debug|*" Project="false" />
     </Project>
-    <Project Path="Serde.FS.Json.SampleRpc/Serde.FS.Json.SampleRpc.fsproj" />
     <Project Path="Serde.FS.Json.Tests/Serde.FS.Json.Tests.fsproj">
       <Build Solution="Debug|*" Project="false" />
     </Project>

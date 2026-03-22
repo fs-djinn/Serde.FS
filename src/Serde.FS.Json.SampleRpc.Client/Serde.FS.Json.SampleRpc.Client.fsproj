@@ -11,6 +11,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Serde.FS.Json.SampleRpc.Shared\Serde.FS.Json.SampleRpc.Shared.fsproj" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Compile Include="Program.fs" />
 	</ItemGroup>
 

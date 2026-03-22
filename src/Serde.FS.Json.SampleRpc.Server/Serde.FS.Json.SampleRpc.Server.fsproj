@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
@@ -11,6 +11,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Serde.FS.Json.SampleRpc.Shared\Serde.FS.Json.SampleRpc.Shared.fsproj" />
+		<ProjectReference Include="..\Serde.FS.Json.AspNet\Serde.FS.Json.AspNet.fsproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="RpcApi.http" />
+		<Compile Include="OrderApi.fs" />
 		<Compile Include="Program.fs" />
 	</ItemGroup>
 

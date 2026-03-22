@@ -14,7 +14,9 @@ let generatorHostProj    = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.Genera
 let stjGeneratorHostProj = "src/Serde.FS.SystemTextJson.GeneratorHost/Serde.FS.SystemTextJson.GeneratorHost.fsproj"
 let stjProj           = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
 let stjSystemTextJsonProj = "src/Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj"
-let sampleRpcProj     = "src/Serde.FS.Json.SampleRpc/Serde.FS.Json.SampleRpc.fsproj"
+let sampleRpcSharedProj = "src/Serde.FS.Json.SampleRpc.Shared/Serde.FS.Json.SampleRpc.Shared.fsproj"
+let sampleRpcServerProj = "src/Serde.FS.Json.SampleRpc.Server/Serde.FS.Json.SampleRpc.Server.fsproj"
+let sampleRpcClientProj = "src/Serde.FS.Json.SampleRpc.Client/Serde.FS.Json.SampleRpc.Client.fsproj"
 let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
 let sourceGenTestProj = "src/Serde.FS.SourceGen.Tests/Serde.FS.SourceGen.Tests.fsproj"
 let jsonTestProj      = "src/Serde.FS.Json.Tests/Serde.FS.Json.Tests.fsproj"
@@ -43,12 +45,25 @@ let timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmss")
 // All debug packages share the same version
 let debugVersion = $"{stableSerdeFSVersion}.debug.{timestamp}"
 
+// Helper to write Directory.Build.props for a project
+let writeVersionProps (projPath: string) (props: (string * string) list) =
+    let propsPath = Path.Combine(Path.GetDirectoryName(projPath), "Directory.Build.props")
+    let propLines = props |> List.map (fun (k, v) -> $"    <{k}>{v}</{k}>") |> String.concat "\n"
+    let content = $"""<Project>
+  <PropertyGroup>
+{propLines}
+  </PropertyGroup>
+</Project>
+"""
+    File.WriteAllText(propsPath, content)
+    printfn $"  Wrote {propsPath}"
+
 // ---------------------------------------------------------------------------
 // Pipeline: debug (default)
 // ---------------------------------------------------------------------------
 
 pipeline "debug" {
-    description "Pack Serde packages and test the STJ backend via local NuGet feed"
+    description "Pack Serde packages and test via local NuGet feed"
 
     stage "Show versions" {
         run (fun _ ->
@@ -129,41 +144,33 @@ pipeline "debug" {
         run $"dotnet test {jsonTestProj} -c Debug --no-restore"
     }
 
-    stage "Write SampleApp version props" {
+    stage "Write version props" {
         run (fun _ ->
-            // SampleRpc references Serde.FS
-            let rpcPropsPath = Path.Combine(Path.GetDirectoryName(sampleRpcProj), "Directory.Build.props")
-            let rpcContent = $"""<Project>
-  <PropertyGroup>
-    <SerdeFSVersion>{debugVersion}</SerdeFSVersion>
-  </PropertyGroup>
-</Project>
-"""
-            File.WriteAllText(rpcPropsPath, rpcContent)
-            printfn $"  Wrote {rpcPropsPath} with SerdeFSVersion={debugVersion}"
-
-            // SampleApp references Serde.FS.Json
-            let propsPath = Path.Combine(Path.GetDirectoryName(sampleAppProj), "Directory.Build.props")
-            let content = $"""<Project>
-  <PropertyGroup>
-    <SerdeJsonVersion>{debugVersion}</SerdeJsonVersion>
-    <SerdeStjVersion>{debugVersion}</SerdeStjVersion>
-  </PropertyGroup>
-</Project>
-"""
-            File.WriteAllText(propsPath, content)
-            printfn $"  Wrote {propsPath} with SerdeJsonVersion={debugVersion}, SerdeStjVersion={debugVersion}"
+            writeVersionProps sampleRpcSharedProj [ "SerdeFSVersion", debugVersion ]
+            writeVersionProps sampleRpcServerProj [ "SerdeJsonVersion", debugVersion ]
+            writeVersionProps sampleRpcClientProj [ "SerdeJsonVersion", debugVersion ]
+            writeVersionProps sampleAppProj [ "SerdeJsonVersion", debugVersion; "SerdeStjVersion", debugVersion ]
         )
     }
 
-    stage "Restore SampleRpc and SampleApp" {
-        run $"dotnet restore {sampleRpcProj} --no-cache"
+    stage "Restore sample projects" {
+        run $"dotnet restore {sampleRpcSharedProj} --no-cache"
+        run $"dotnet restore {sampleRpcServerProj} --no-cache"
+        run $"dotnet restore {sampleRpcClientProj} --no-cache"
         run $"dotnet restore {sampleAppProj} --no-cache"
     }
 
     stage "Build and run SampleApp" {
         run $"dotnet build {sampleAppProj} --no-restore"
         run $"dotnet run --project {sampleAppProj} --no-build"
+    }
+
+    stage "Build SampleRpc.Server" {
+        run $"dotnet build {sampleRpcServerProj} --no-restore"
+    }
+
+    stage "Build SampleRpc.Client" {
+        run $"dotnet build {sampleRpcClientProj} --no-restore"
     }
 
     stage "Summary" {
@@ -178,8 +185,10 @@ pipeline "debug" {
             printfn $"    Serde.FS.SourceGen        {debugVersion}"
             printfn $"    Serde.FS.Json             {debugVersion}"
             printfn $"    Serde.FS.SystemTextJson   {debugVersion}"
-            printfn $"  Restore source:     .nuget-local (--no-cache)"
-            printfn $"  SampleApp resolved: {debugVersion}"
+            printfn $"  Sample projects:"
+            printfn $"    SampleApp                 OK"
+            printfn $"    SampleRpc.Server          OK"
+            printfn $"    SampleRpc.Client          OK"
             printfn "========================================"
             printfn ""
         )

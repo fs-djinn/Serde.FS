@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SampleRpc.Server": {
+      "commandName": "Project",
+      "applicationUrl": "http://localhost:5050"
+    }
+  }
+}

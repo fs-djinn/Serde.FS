@@ -1,4 +1,4 @@
-namespace SampleRpc
+namespace SampleRpc.Shared
 
 open Serde.FS
 
