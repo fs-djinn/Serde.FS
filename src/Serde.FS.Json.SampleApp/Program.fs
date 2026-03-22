@@ -32,13 +32,32 @@ type OrderApi() =
             }
 
 open Microsoft.AspNetCore.Builder
+open Microsoft.Extensions.DependencyInjection
 open Serde.FS.Json.AspNet
 
 let runWeb (argv: string[]) =
     let builder = WebApplication.CreateBuilder(argv)
-    let app = builder.Build()
 
-    app.MapRpcApi<SampleRpc.IOrderApi>(OrderApi()) |> ignore
+    builder.Services
+        .AddAuthentication("ApiKey")
+        .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Auth.ApiKeyAuthHandler>("ApiKey", ignore)
+    |> ignore
+
+    builder.Services.AddAuthorization(fun options ->
+        options.AddPolicy("ApiKeyABC", fun policy ->
+            policy.RequireAuthenticatedUser() |> ignore
+        )
+    ) |> ignore
+
+    let app = builder.Build()
+    app.UseAuthentication() |> ignore
+    app.UseAuthorization() |> ignore
+
+    let rpc = app.MapRpcApi<IOrderApi>(OrderApi())
+
+    rpc.GetRoute(nameof Unchecked.defaultof<IOrderApi>.GetProduct)
+        .RequireAuthorization("ApiKeyABC") |> ignore
+
     app.MapGet("/", System.Func<string>(fun () -> "Serde.FS.Json SampleApp — RPC endpoints at /rpc/{method}")) |> ignore
 
     printfn "Starting web server..."

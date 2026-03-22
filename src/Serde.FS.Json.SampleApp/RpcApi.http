@@ -6,10 +6,11 @@
 ###    abstract PlaceOrder : Order -> Async<OrderSummary>
 ###    abstract ListProducts : unit -> Async<Product list>
 
-### Get Product
+### Get Product (requires X-Api-Key: ABC)
 POST http://localhost:5050/rpc/GetProduct
 Content-Type: application/json
 Accept: application/json
+X-Api-Key: ABC
 
 42
 

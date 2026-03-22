@@ -18,6 +18,7 @@
 	<ItemGroup>
 		<None Include="RpcApi.http" />
 		<Compile Include="ConsoleApp.fs" />
+		<Compile Include="Auth.fs" />
 		<Compile Include="Program.fs" />
 	</ItemGroup>
 
