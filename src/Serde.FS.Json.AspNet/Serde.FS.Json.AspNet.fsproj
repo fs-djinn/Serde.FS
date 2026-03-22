@@ -3,6 +3,22 @@
 	<PropertyGroup>
 		<TargetFramework>net8.0</TargetFramework>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+		<IsPackable>true</IsPackable>
+
+		<PackageId>Serde.FS.Json.AspNet</PackageId>
+		<!-- Versioned in lockstep with Serde.FS.Json to ensure runtime compatibility -->
+		<Version>$(SerdeJsonVersion)</Version>
+		<Authors>Jordan Marr</Authors>
+		<Description>
+			ASP.NET Core integration for Serde.FS.Json RPC. Provides MapRpcApi extension for routing
+			[RpcApi] interfaces to minimal API endpoints using SerdeJson serialization.
+		</Description>
+
+		<PackageTags>fsharp;serde;json;rpc;aspnet;minimal-api</PackageTags>
+
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 	</PropertyGroup>
 
 	<ItemGroup>
