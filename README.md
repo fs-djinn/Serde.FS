@@ -4,24 +4,174 @@
 [![Serde.FS.SourceGen](https://img.shields.io/nuget/vpre/Serde.FS.SourceGen.svg?label=Serde.FS.SourceGen)](https://www.nuget.org/packages/Serde.FS.SourceGen/)
 [![Serde.FS.Json](https://img.shields.io/nuget/vpre/Serde.FS.Json.svg?label=Serde.FS.Json)](https://www.nuget.org/packages/Serde.FS.Json/)
 
-Serde.FS is a strict, deterministic, compile‑time–validated serialization framework for F#. It brings the core ideas of Rust Serde into the .NET ecosystem:
-
-- **No reflection**  
-- **No runtime fallback**  
-- **No silent behavior**  
-- **No schema drift**  
-- **No surprises**  
+Serde.FS is a reflection‑free, compile‑time validated serialization and RPC framework for F#.  
+It brings Rust‑style determinism to .NET and adds a **zero‑boilerplate RPC layer** on top.
 
 ---
 
-## 📦 Backends
+## 🚀 RPC in Three Blocks
 
-Serde.FS is backend‑agnostic. Today it ships with:
+### Shared.fsproj
+```fsharp
+[<RpcApi>]
+type IOrderApi =
+    abstract GetProduct : ProductId -> Async<Product>
+    abstract PlaceOrder : Order -> Async<OrderSummary>
+```
 
-- **Serde.FS.Json** — the native, reflection‑free JSON backend (recommended)
-- **Serde.FS.SystemTextJson** — optional compatibility backend built on System.Text.Json 🚧
+### Server.fsproj
+```fsharp
+app.MapRpc<IOrderApi>(OrderApi())
+```
 
-Most users will only need **Serde.FS.Json**.
+### Client.fsproj
+```fsharp
+let! product = client.GetProduct(ProductId 42)
+```
+
+That’s the entire workflow:  
+**Define an interface → Implement it → Call it.**  
+
+All routing, serialization, and client code is fully generated at compile time by the same deterministic engine that powers Serde.FS — no reflection, no runtime inference, no surprises.
+
+---
+
+## 📦 NuGet Packages
+
+Serde.FS is composed of several focused packages:
+
+| Package | Description |
+|--------|-------------|
+| **Serde.FS** | Core metadata + attributes used by all backends |
+| **Serde.FS.Json** | Deterministic, reflection‑free JSON backend |
+| **Serde.FS.Json.AspNet** | Integrates Serde.FS.Json into ASP.NET for RPC servers |
+| **Serde.FS.Json.Fable** 🚧 | Fable RPC client integration (in development) |
+
+Most users will install:
+
+- `Serde.FS.Json.AspNet` (for RPC servers)
+- `Serde.FS.Json` (for serialization)
+
+---
+
+## 🌐 Coming Soon: Serde.FS.Json.Fable
+
+A first‑class Fable RPC client is in development.
+It will let you consume any `[<RpcApi>]` interface directly from a Fable project with the same zero‑boilerplate workflow:
+
+```fsharp
+let! product = client.GetProduct(ProductId 42)
+```
+
+---
+
+## 🚀 Getting Started
+
+This is the smallest possible Serde.FS RPC setup.  
+It uses three projects — **Shared**, **Server**, and **Client** — following the familiar SAFE‑style structure.
+
+---
+
+### 📁 1. Create the Shared project
+
+Define your RPC interface and domain types.
+
+```fsharp
+namespace SampleRpc.Shared
+
+open Serde.FS
+
+// DTOs — no [<Serde>] needed, discovered via [<RpcApi>] interface
+
+[<Struct>]
+type ProductId = ProductId of int
+
+type Product =
+    { Id: ProductId
+      Name: string }
+
+[<RpcApi>]
+type IOrderApi =
+    abstract GetProduct : ProductId -> Async<Product>
+```
+
+This is the only place where the interface lives.  
+Both the server and client reference this project.
+
+See the full shared example here:
+[src/Serde.FS.Json.SampleRpc.Shared/Shared.fs](src/Serde.FS.Json.SampleRpc.Shared/Domain.fs)
+
+---
+
+### 🖥️ 2. Create the Server project
+
+A minimal ASP.NET RPC server:
+
+```fsharp
+open Microsoft.AspNetCore.Builder
+open SampleRpc.Shared
+open Serde.FS.Json.AspNet
+
+type OrderApi() =
+    interface IOrderApi with
+        member _.GetProduct(ProductId id) =
+            async { return { Id = ProductId id; Name = $"Product %d{id}" } }
+
+[<Serde.FS.EntryPoint>]
+let main argv =
+    let builder = WebApplication.CreateBuilder(argv)
+    let app = builder.Build()
+
+    app.MapRpcApi<IOrderApi>(OrderApi()) |> ignore
+
+    app.Run()
+    0
+```
+
+That’s it — no authentication, no policies, no extra endpoints.  
+Just a clean RPC server.
+
+See the full server example here:
+[src/Serde.FS.Json.SampleRpc.Server/Program.fs](src/Serde.FS.Json.SampleRpc.Server/Program.fs)
+
+---
+
+### 💻 3. Create the Client project
+
+Consume the RPC API with a generated client:
+
+```fsharp
+open SampleRpc.Shared
+open Serde.FS.Json
+
+[<Serde.FS.EntryPoint>]
+let main _ =
+    async {
+        use http = new HttpClient()
+        let orders = RpcClient.create<IOrderApi> http "http://localhost:5000"
+
+        let! product = orders.GetProduct(ProductId 42)
+        printfn $"Product: %A{product}"
+    }
+    |> Async.RunSynchronously
+
+    0
+```
+
+The client is fully generated at compile time —  
+no reflection, no runtime inference, no DTO drift.
+
+See the full client example here:
+[src/Serde.FS.Json.SampleRpc.Client/Program.fs](src/Serde.FS.Json.SampleRpc.Client/Program.fs)
+
+
+---
+
+### 🎉 That’s the entire workflow
+
+**Define an interface → Implement it → Call it.**
+
+All routing, serialization, and client code is generated at compile time by the same deterministic engine that powers Serde.FS.
 
 ---
 
