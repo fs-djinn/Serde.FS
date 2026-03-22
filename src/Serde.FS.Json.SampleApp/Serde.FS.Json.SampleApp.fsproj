@@ -17,10 +17,9 @@
 
 	<ItemGroup>
 		<None Include="RpcApi.http" />
+		<Compile Include="ConsoleApp.fs" />
 		<Compile Include="Program.fs" />
 	</ItemGroup>
-
-	<ItemGroup />
 
 	<ItemGroup>
 	  <PackageReference Update="FSharp.Core" Version="10.0.103" />
