@@ -306,8 +306,9 @@ module SerdeGeneratorEngine =
             parsedTypes
             |> Seq.map (fun t -> t.Raw.TypeName)
             |> Set.ofSeq
+        let rpcDiscoveryResult = RpcApiDiscovery.discover (Seq.toList allTypeInfos) sourceFiles
         let rpcApiTypes =
-            RpcApiDiscovery.discover (Seq.toList allTypeInfos) sourceFiles
+            rpcDiscoveryResult.DiscoveredTypes
             |> List.filter (fun t -> not (existingTypeNames.Contains t.Raw.TypeName))
         parsedTypes.AddRange(rpcApiTypes)
 
@@ -525,6 +526,14 @@ module SerdeGeneratorEngine =
                         generatedSources.Add({ HintName = hintName; Code = code })
                 | None -> ()
             | _ -> ()
+
+            // Emit RPC dispatch modules for [<RpcApi>] interfaces
+            if not rpcDiscoveryResult.Interfaces.IsEmpty then
+                match emitter with
+                | :? ISerdeRpcEmitter as rpcEmitter ->
+                    for (hintName, code) in rpcEmitter.EmitRpcModules(rpcDiscoveryResult.Interfaces) do
+                        generatedSources.Add({ HintName = hintName; Code = code })
+                | _ -> ()
 
             // Emit entry point wrapper if any source file has [<EntryPoint>]
             let emitEntryPoint =

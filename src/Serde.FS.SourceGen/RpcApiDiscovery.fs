@@ -39,6 +39,9 @@ module internal RpcApiDiscovery =
             "Result"
         ]
 
+    /// Async/Task wrapper names to unwrap for return types.
+    let private asyncWrapperNames = set [ "Async"; "Task" ]
+
     /// Recursively extract all type names referenced in a SynType.
     /// Unwraps Async<T>, Task<T>, and function types (A -> B).
     let rec private collectTypeNames (synType: SynType) : string list =
@@ -79,6 +82,84 @@ module internal RpcApiDiscovery =
         | SynType.Var _ -> [] // generic parameter like 'T — skip
         | _ -> []
 
+    /// Render a SynType as an F# type expression string.
+    /// The resolve function maps short type names to fully qualified names.
+    let rec private synTypeToString (resolve: string -> string) (synType: SynType) : string =
+        match synType with
+        | SynType.LongIdent(SynLongIdent(id = idents)) ->
+            let name = identToString idents
+            resolve name
+
+        | SynType.App(typeName, _, typeArgs, _, _, isPostfix, _) ->
+            let baseName = synTypeToString resolve typeName
+            if typeArgs.IsEmpty then baseName
+            elif isPostfix && typeArgs.Length = 1 then
+                $"{synTypeToString resolve typeArgs.[0]} {baseName}"
+            else
+                let args = typeArgs |> List.map (synTypeToString resolve) |> String.concat ", "
+                $"{baseName}<{args}>"
+
+        | SynType.Fun(argType, returnType, _, _) ->
+            $"{synTypeToString resolve argType} -> {synTypeToString resolve returnType}"
+
+        | SynType.Tuple(_, segments, _) ->
+            segments
+            |> List.choose (fun seg ->
+                match seg with
+                | SynTupleTypeSegment.Type t -> Some (synTypeToString resolve t)
+                | _ -> None)
+            |> String.concat " * "
+
+        | SynType.Paren(innerType, _) ->
+            synTypeToString resolve innerType
+
+        | SynType.Array(rank, elementType, _) ->
+            let suffix = System.String(',', rank - 1)
+            $"{synTypeToString resolve elementType}[{suffix}]"
+
+        | SynType.Var(SynTypar(ident, _, _), _) ->
+            $"'{ident.idText}"
+
+        | _ -> "obj"
+
+    /// Unwrap Async<T> or Task<T> and return the inner type string.
+    let rec private unwrapAsyncType (resolve: string -> string) (synType: SynType) : string =
+        match synType with
+        | SynType.App(typeName, _, [ innerType ], _, _, _, _) ->
+            let baseName =
+                match typeName with
+                | SynType.LongIdent(SynLongIdent(id = idents)) -> identToString idents
+                | _ -> ""
+            if asyncWrapperNames.Contains baseName then
+                synTypeToString resolve innerType
+            else
+                synTypeToString resolve synType
+        | SynType.Paren(innerType, _) ->
+            unwrapAsyncType resolve innerType
+        | _ ->
+            synTypeToString resolve synType
+
+    /// Extract the input type and return type from a method signature SynType.
+    /// For `A -> Async<B>`, returns (inputType="A", outputType="B").
+    let private extractMethodTypes (resolve: string -> string) (synType: SynType) : string * string =
+        match synType with
+        | SynType.Fun(argType, returnType, _, _) ->
+            let inputStr = synTypeToString resolve argType
+            let outputStr = unwrapAsyncType resolve returnType
+            (inputStr, outputStr)
+        | _ ->
+            ("unit", synTypeToString resolve synType)
+
+    /// Extract method name and types from an abstract member's SynValSig.
+    let private extractMethodInfo (resolve: string -> string) (valSig: SynValSig) : RpcMethodInfo option =
+        let (SynValSig(ident = SynIdent(ident, _); synType = synType)) = valSig
+        let inputType, outputType = extractMethodTypes resolve synType
+        Some {
+            MethodName = ident.idText
+            InputType = inputType
+            OutputType = outputType
+        }
+
     /// Extract type names from an abstract member's SynValSig.
     let private extractFromValSig (valSig: SynValSig) : string list =
         let (SynValSig(synType = synType)) = valSig
@@ -96,49 +177,90 @@ module internal RpcApiDiscovery =
                     let name = identToString idents
                     rpcApiAttrNames.Contains name))
 
-    /// Walk a parsed AST to find [<RpcApi>] interfaces and extract type names from their members.
-    let private findRpcApiTypeNames (filePath: string) (sourceText: string) : string list =
+    /// Get the fully qualified name from a SynComponentInfo in the context of a namespace/modules.
+    let private getTypeName (ns: string option) (modules: string list) (synComponentInfo: SynComponentInfo) : string * string =
+        let (SynComponentInfo(longId = typeNameIdent)) = synComponentInfo
+        let shortName = typeNameIdent |> List.map (fun i -> i.idText) |> String.concat "."
+        let parts = [ yield! ns |> Option.toList; yield! modules; yield shortName ]
+        let fullName = String.concat "." parts
+        (fullName, shortName)
+
+    /// Collected data from walking [<RpcApi>] interfaces.
+    type private RpcApiCollected = {
+        TypeNames: ResizeArray<string>
+        Interfaces: ResizeArray<RpcInterfaceInfo>
+    }
+
+    /// Walk a parsed AST to find [<RpcApi>] interfaces and extract type names + method info.
+    let private findRpcApis (resolve: string -> string) (filePath: string) (sourceText: string) : RpcApiCollected =
         let source = SourceText.ofString sourceText
         let parsingOptions = { FSharpParsingOptions.Default with SourceFiles = [| filePath |] }
         let parseResults = checker.ParseFile(filePath, source, parsingOptions) |> Async.RunSynchronously
 
-        let typeNames = ResizeArray<string>()
+        let collected = {
+            TypeNames = ResizeArray<string>()
+            Interfaces = ResizeArray<RpcInterfaceInfo>()
+        }
 
-        let rec walkTypeDefn (typeDefn: SynTypeDefn) =
+        let walkTypeDefn (ns: string option) (modules: string list) (typeDefn: SynTypeDefn) =
             let (SynTypeDefn(typeInfo = synComponentInfo; typeRepr = typeRepr; members = members)) = typeDefn
             if hasRpcApiAttr synComponentInfo then
+                let fullName, shortName = getTypeName ns modules synComponentInfo
+                let methods = ResizeArray<RpcMethodInfo>()
+
                 // Extract from ObjectModel representation (interface members)
                 match typeRepr with
                 | SynTypeDefnRepr.ObjectModel(_, memberDefns, _) ->
                     for memberDefn in memberDefns do
                         match memberDefn with
                         | SynMemberDefn.AbstractSlot(slotSig, _, _, _) ->
-                            typeNames.AddRange(extractFromValSig slotSig)
+                            collected.TypeNames.AddRange(extractFromValSig slotSig)
+                            match extractMethodInfo resolve slotSig with
+                            | Some mi -> methods.Add(mi)
+                            | None -> ()
                         | _ -> ()
                 | _ -> ()
                 // Also check augmentation members
                 for memberDefn in members do
                     match memberDefn with
                     | SynMemberDefn.AbstractSlot(slotSig, _, _, _) ->
-                        typeNames.AddRange(extractFromValSig slotSig)
+                        collected.TypeNames.AddRange(extractFromValSig slotSig)
+                        match extractMethodInfo resolve slotSig with
+                        | Some mi -> methods.Add(mi)
+                        | None -> ()
                     | _ -> ()
 
-        let rec walkDecls (decls: SynModuleDecl list) =
+                collected.Interfaces.Add({
+                    FullName = fullName
+                    ShortName = shortName
+                    Methods = Seq.toList methods
+                })
+
+        let rec walkDecls (ns: string option) (modules: string list) (decls: SynModuleDecl list) =
             for decl in decls do
                 match decl with
                 | SynModuleDecl.Types(typeDefns, _) ->
-                    for td in typeDefns do walkTypeDefn td
-                | SynModuleDecl.NestedModule(decls = nestedDecls) ->
-                    walkDecls nestedDecls
+                    for td in typeDefns do walkTypeDefn ns modules td
+                | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo(longId = moduleIdent); decls = nestedDecls) ->
+                    let moduleName = moduleIdent |> List.map (fun i -> i.idText) |> String.concat "."
+                    walkDecls ns (modules @ [moduleName]) nestedDecls
                 | _ -> ()
 
         match parseResults.ParseTree with
         | ParsedInput.ImplFile(ParsedImplFileInput(contents = modules)) ->
-            for SynModuleOrNamespace(decls = decls) in modules do
-                walkDecls decls
+            for SynModuleOrNamespace(longId = nsId; kind = kind; decls = decls) in modules do
+                match kind with
+                | SynModuleOrNamespaceKind.DeclaredNamespace ->
+                    let ns = Some(nsId |> List.map (fun i -> i.idText) |> String.concat ".")
+                    walkDecls ns [] decls
+                | SynModuleOrNamespaceKind.NamedModule ->
+                    let moduleNames = nsId |> List.map (fun i -> i.idText)
+                    walkDecls None moduleNames decls
+                | _ ->
+                    walkDecls None [] decls
         | _ -> ()
 
-        Seq.toList typeNames
+        collected
 
     /// Build a lookup map from short type name to TypeInfo.
     let private buildLookup (allTypeInfos: TypeInfo list) : Map<string, TypeInfo> =
@@ -184,34 +306,60 @@ module internal RpcApiDiscovery =
                 else [ ti.TypeName ]
             baseName @ (ti.GenericArguments |> List.collect extractTypeNamesFromTypeInfo)
 
+    /// Resolve a short type name to its fully qualified name using the lookup map.
+    let private resolveTypeName (lookup: Map<string, TypeInfo>) (name: string) : string =
+        match Map.tryFind name lookup with
+        | Some ti ->
+            let parts =
+                [ yield! ti.Namespace |> Option.toList
+                  yield! ti.EnclosingModules
+                  yield ti.TypeName ]
+            String.concat "." parts
+        | None -> name
+
     /// Discover all types transitively referenced from [<RpcApi>] interfaces.
-    /// Returns SerdeTypeInfo list for types that need codec generation.
-    let discover (allTypeInfos: TypeInfo list) (sourceFiles: (string * string) list) : SerdeTypeInfo list =
-        // Step 1: Find all type names referenced in [<RpcApi>] interface members
-        let rootTypeNames =
+    /// Returns both discovered types (for codec generation) and interface metadata (for RPC dispatch modules).
+    let discover (allTypeInfos: TypeInfo list) (sourceFiles: (string * string) list) : RpcDiscoveryResult =
+        // Build lookup early so we can resolve type names in method signatures
+        let lookup = buildLookup allTypeInfos
+        let resolve = resolveTypeName lookup
+
+        // Step 1: Find all [<RpcApi>] interfaces and collect type names + method info
+        let allCollected =
             sourceFiles
             |> List.collect (fun (filePath, sourceText) ->
                 if filePath.EndsWith(".fs") then
-                    try findRpcApiTypeNames filePath sourceText
+                    try [ findRpcApis resolve filePath sourceText ]
                     with _ -> []
                 else [])
+
+        let rootTypeNames =
+            allCollected
+            |> List.collect (fun c -> Seq.toList c.TypeNames)
             |> List.distinct
 
-        if rootTypeNames.IsEmpty then []
+        let interfaces =
+            allCollected
+            |> List.collect (fun c -> Seq.toList c.Interfaces)
+
+        if rootTypeNames.IsEmpty then
+            { DiscoveredTypes = []; Interfaces = interfaces }
         else
-            // Step 2: Build lookup and compute transitive closure
-            let lookup = buildLookup allTypeInfos
+            // Step 2: Compute transitive closure
             let allDiscoveredNames =
                 rootTypeNames
                 |> List.filter (fun n -> not (skipTypeNames.Contains n))
                 |> List.fold (fun acc name -> collectTransitiveTypeNames lookup acc name) Set.empty
 
             // Step 3: Build SerdeTypeInfo for each discovered type
-            allDiscoveredNames
-            |> Set.toList
-            |> List.choose (fun name -> Map.tryFind name lookup)
-            |> List.filter (fun ti ->
-                match ti.Kind with
-                | Record _ | Union _ | Enum _ | AnonymousRecord _ -> true
-                | _ -> false)
-            |> List.map SerdeMetadataBuilder.buildSerdeTypeInfo
+            let discoveredTypes =
+                allDiscoveredNames
+                |> Set.toList
+                |> List.choose (fun name -> Map.tryFind name lookup)
+                |> List.filter (fun ti ->
+                    match ti.Kind with
+                    | Record _ | Union _ | Enum _ | AnonymousRecord _ -> true
+                    | _ -> false)
+                |> List.map SerdeMetadataBuilder.buildSerdeTypeInfo
+
+            { DiscoveredTypes = discoveredTypes; Interfaces = interfaces }
