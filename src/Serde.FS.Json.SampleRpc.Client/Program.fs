@@ -33,5 +33,13 @@ let main _argv =
         printfn "Summary: %A" summary
     }
 
-    run.Wait()
+    try
+        run.Wait()
+    with ex ->
+        printfn "Error: %s" ex.InnerException.Message
+
+    printfn ""
+    printf "Press any key to exit..."
+    System.Console.ReadKey(true) |> ignore
+    printfn ""
     0
