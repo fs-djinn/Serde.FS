@@ -47,8 +47,14 @@ type EntryPointAttribute() = inherit Attribute()
 /// Marks an interface as an RPC API contract. The source generator will walk
 /// all abstract member signatures and generate codecs for every type in the
 /// transitive closure, without requiring [<Serde>] on those types.
+/// Optional Root and Version control the route prefix: /rpc/{Root}/{Version}/{Method}
 [<AttributeUsage(AttributeTargets.Interface, AllowMultiple = false)>]
-type RpcApiAttribute() = inherit Attribute()
+type RpcApiAttribute() =
+    inherit Attribute()
+    /// Custom route namespace. Defaults to the interface name.
+    member val Root : string = null with get, set
+    /// Version segment (e.g., "v2"). Omitted if null.
+    member val Version : string = null with get, set
 
 /// Defines a discoverable bootstrap that will be automatically run during the entry point startup sequence.
 type IEntryPointBootstrap =

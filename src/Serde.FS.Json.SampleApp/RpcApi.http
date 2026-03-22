@@ -7,7 +7,7 @@
 ###    abstract ListProducts : unit -> Async<Product list>
 
 ### Get Product (requires X-Api-Key: ABC)
-POST http://localhost:5050/rpc/GetProduct
+POST http://localhost:5050/rpc/IOrderApi/GetProduct
 Content-Type: application/json
 Accept: application/json
 X-Api-Key: ABC
@@ -15,7 +15,7 @@ X-Api-Key: ABC
 42
 
 ### Place Order
-POST http://localhost:5050/rpc/PlaceOrder
+POST http://localhost:5050/rpc/IOrderApi/PlaceOrder
 Content-Type: application/json
 Accept: application/json
 
@@ -23,7 +23,7 @@ Accept: application/json
 
 
 ### List Products
-POST http://localhost:5050/rpc/ListProducts
+POST http://localhost:5050/rpc/IOrderApi/ListProducts
 Content-Type: application/json
 Accept: application/json
 

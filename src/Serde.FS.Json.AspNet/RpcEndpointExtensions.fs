@@ -36,10 +36,28 @@ module RpcEndpointExtensions =
 
     type IEndpointRouteBuilder with
         member this.MapRpcApi<'TApi>(impl: 'TApi) =
-            let apiName = typeof<'TApi>.Name
+            let apiType = typeof<'TApi>
+            let apiName = apiType.Name
             let rpcModule = RpcReflection.loadModule apiName
 
-            let group = this.MapGroup("/rpc")
+            // Read [<RpcApi>] attribute for Root and Version
+            let rpcAttr =
+                apiType.GetCustomAttributes(typeof<Serde.FS.RpcApiAttribute>, false)
+                |> Array.tryHead
+                |> Option.map (fun a -> a :?> Serde.FS.RpcApiAttribute)
+
+            let root =
+                match rpcAttr |> Option.bind (fun a -> Option.ofObj a.Root) with
+                | Some r when r.Length > 0 -> r
+                | _ -> apiName
+
+            let versionSegment =
+                match rpcAttr |> Option.bind (fun a -> Option.ofObj a.Version) with
+                | Some v when v.Length > 0 -> $"/%s{v}"
+                | _ -> ""
+
+            let routePrefix = $"/rpc/%s{root}%s{versionSegment}"
+            let group = this.MapGroup(routePrefix)
             let endpoints = Dictionary<string, IEndpointConventionBuilder>()
 
             for methodName in RpcReflection.getMethods rpcModule do
