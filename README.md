@@ -86,6 +86,11 @@ SampleRpc/
 
 Define your RPC interface and domain types.
 
+```bash
+dotnet new classlib -lang F# -n Shared
+dotnet add package Serde.FS
+```
+
 ```fsharp
 namespace SampleRpc.Shared
 
@@ -116,6 +121,11 @@ See the full shared example here:
 ### 🖥️ 2. Create the Server project
 
 A minimal ASP.NET RPC server:
+
+```bash
+dotnet new classlib -lang F# -n Server
+dotnet add package Serde.FS.Json.AspNet
+```
 
 ```fsharp
 open Microsoft.AspNetCore.Builder
@@ -149,6 +159,11 @@ See the full server example here:
 ### 💻 3. Create the Client project
 
 Consume the RPC API with a generated client:
+
+```bash
+dotnet new classlib -lang F# -n Client
+dotnet add package Serde.FS.Json
+```
 
 ```fsharp
 open SampleRpc.Shared
