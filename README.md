@@ -92,7 +92,7 @@ dotnet add package Serde.FS
 ```
 
 ```fsharp
-namespace SampleRpc.Shared
+namespace Shared
 
 open Serde.FS
 
@@ -128,8 +128,8 @@ dotnet add package Serde.FS.Json.AspNet
 ```
 
 ```fsharp
+open Shared
 open Microsoft.AspNetCore.Builder
-open SampleRpc.Shared
 open Serde.FS.Json.AspNet
 
 type OrderApi() =
@@ -166,7 +166,7 @@ dotnet add package Serde.FS.Json
 ```
 
 ```fsharp
-open SampleRpc.Shared
+open Shared
 open Serde.FS.Json
 
 [<Serde.FS.EntryPoint>]
