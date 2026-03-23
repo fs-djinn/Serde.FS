@@ -182,6 +182,15 @@ All routing, serialization, and client code is generated at compile time by the 
 
 ---
 
+### Customizing RPC Routing
+
+```fsharp
+[<RpcApi(Root = "orders", UrlCase = UrlCase.Kebab)>]
+type IOrderApi =
+    abstract GetProduct : ProductId -> Async<Product>
+```
+---
+
 ## 🚀 Serialization (Standalone Use)
 
 ### 1. Install the JSON backend
