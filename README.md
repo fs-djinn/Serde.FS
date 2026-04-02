@@ -86,8 +86,13 @@ SampleRpc/
 
 Define your RPC interface and domain types.
 
+```bash
+dotnet new classlib -lang F# -n Shared
+dotnet add package Serde.FS
+```
+
 ```fsharp
-namespace SampleRpc.Shared
+namespace Shared
 
 open Serde.FS
 
@@ -117,9 +122,14 @@ See the full shared example here:
 
 A minimal ASP.NET RPC server:
 
+```bash
+dotnet new web -lang F# -n Server
+dotnet add package Serde.FS.Json.AspNet
+```
+
 ```fsharp
+open Shared
 open Microsoft.AspNetCore.Builder
-open SampleRpc.Shared
 open Serde.FS.Json.AspNet
 
 type OrderApi() =
@@ -150,8 +160,13 @@ See the full server example here:
 
 Consume the RPC API with a generated client:
 
+```bash
+dotnet new console -lang F# -n Client
+dotnet add package Serde.FS.Json
+```
+
 ```fsharp
-open SampleRpc.Shared
+open Shared
 open Serde.FS.Json
 
 [<Serde.FS.EntryPoint>]
