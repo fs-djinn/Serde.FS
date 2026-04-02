@@ -7,6 +7,8 @@ open SampleRpc.Shared
 [<Serde.FS.EntryPoint>]
 let main _argv =
     use http = new HttpClient()
+    http.DefaultRequestHeaders.Add("X-Api-Key", "ABC")
+
     let orders = RpcClient.create<IOrderApi> http "http://localhost:5050"
 
     try
