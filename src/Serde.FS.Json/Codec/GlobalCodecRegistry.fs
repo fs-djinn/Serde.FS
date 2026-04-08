@@ -8,3 +8,4 @@ module GlobalCodecRegistry =
         |> CodecRegistry.addFactory (typeof<System.Array>, CollectionCodecs.ArrayCodecFactory.create)
         |> CodecRegistry.addFactory (typedefof<list<_>>, CollectionCodecs.ListCodecFactory.create)
         |> CodecRegistry.addFactory (typedefof<Map<_,_>>, CollectionCodecs.MapCodecFactory.create)
+        |> CodecRegistry.addFactory (typedefof<Result<_,_>>, CollectionCodecs.ResultCodecFactory.create)

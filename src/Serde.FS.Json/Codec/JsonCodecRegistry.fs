@@ -8,3 +8,4 @@ module JsonCodecRegistry =
         |> CodecRegistry.addFactory (typedefof<Map<_,_>>, CollectionCodecs.MapCodecFactory.create)
         |> CodecRegistry.addFactory (typeof<System.Array>, CollectionCodecs.ArrayCodecFactory.create)
         |> CodecRegistry.addFactory (typedefof<List<_>>, CollectionCodecs.ListCodecFactory.create)
+        |> CodecRegistry.addFactory (typedefof<Result<_,_>>, CollectionCodecs.ResultCodecFactory.create)

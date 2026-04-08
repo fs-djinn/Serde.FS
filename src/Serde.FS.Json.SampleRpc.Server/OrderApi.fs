@@ -14,6 +14,19 @@ type OrderApi() =
                 } : Product
             }
 
+        member _.TryGetProduct id =
+            async {
+                if id > 0 then
+                    return Ok {
+                        Id = { Value = id }
+                        Name = $"Product #{id}"
+                        Price = decimal id * 9.99m
+                        Tags = [ "sample" ]
+                    }
+                else
+                    return Error $"Product with id {id} not found"
+            }
+
         member _.PlaceOrder order =
             async {
                 let totalItems = order.Lines |> List.sumBy (fun l -> l.Quantity)

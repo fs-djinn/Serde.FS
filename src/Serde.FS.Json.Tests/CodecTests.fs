@@ -322,3 +322,48 @@ let ``GlobalCodecRegistry Current can be updated`` () =
         Assert.AreEqual(JsonValue.String "A", found.Value.Encode(box 'A'))
     finally
         GlobalCodecRegistry.Current <- original
+
+// -- Result codec factory tests --
+
+[<Test>]
+let ``ResultCodecFactory encodes Ok value`` () =
+    let codec = CollectionCodecs.ResultCodecFactory.create [| typeof<string>; typeof<int> |] GlobalCodecRegistry.Current
+    let result : Result<string, int> = Ok "hello"
+    let json = codec.Encode(box result)
+    Assert.AreEqual(Object [ "Ok", String "hello" ], json)
+
+[<Test>]
+let ``ResultCodecFactory encodes Error value`` () =
+    let codec = CollectionCodecs.ResultCodecFactory.create [| typeof<string>; typeof<int> |] GlobalCodecRegistry.Current
+    let result : Result<string, int> = Error 42
+    let json = codec.Encode(box result)
+    Assert.AreEqual(Object [ "Error", Number 42m ], json)
+
+[<Test>]
+let ``ResultCodecFactory round-trips Ok`` () =
+    let codec = CollectionCodecs.ResultCodecFactory.create [| typeof<string>; typeof<int> |] GlobalCodecRegistry.Current
+    let original : Result<string, int> = Ok "hello"
+    let decoded = codec.Decode(codec.Encode(box original))
+    Assert.AreEqual(box original, decoded)
+
+[<Test>]
+let ``ResultCodecFactory round-trips Error`` () =
+    let codec = CollectionCodecs.ResultCodecFactory.create [| typeof<string>; typeof<int> |] GlobalCodecRegistry.Current
+    let original : Result<string, int> = Error 99
+    let decoded = codec.Decode(codec.Encode(box original))
+    Assert.AreEqual(box original, decoded)
+
+[<Test>]
+let ``ResultCodecFactory resolves via GlobalCodecRegistry`` () =
+    let resultType = typedefof<Result<_,_>>.MakeGenericType(typeof<string>, typeof<int>)
+    let codec = CodecResolver.resolve resultType GlobalCodecRegistry.Current
+    let original : Result<string, int> = Ok "resolved"
+    let decoded = codec.Decode(codec.Encode(box original))
+    Assert.AreEqual(box original, decoded)
+
+[<Test>]
+let ``ResultCodecFactory throws on invalid JSON`` () =
+    let codec = CollectionCodecs.ResultCodecFactory.create [| typeof<string>; typeof<int> |] GlobalCodecRegistry.Current
+    Assert.Throws<exn>(fun () ->
+        codec.Decode (String "not a result") |> ignore
+    ) |> ignore

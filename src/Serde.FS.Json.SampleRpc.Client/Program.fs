@@ -18,6 +18,16 @@ let main _argv =
             printfn "Product: %A" product
 
             printfn ""
+            printfn "--- TryGetProduct (Ok) ---"
+            let! result = orders.TryGetProduct 42
+            printfn "Result: %A" result
+
+            printfn ""
+            printfn "--- TryGetProduct (Error) ---"
+            let! result = orders.TryGetProduct -1
+            printfn "Result: %A" result
+
+            printfn ""
             printfn "--- ListProducts ---"
             let! products = orders.ListProducts()
             for p in products do

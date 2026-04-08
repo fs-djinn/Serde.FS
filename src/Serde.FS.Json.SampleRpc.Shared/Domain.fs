@@ -36,5 +36,6 @@ type OrderSummary = {
 [<RpcApi>]
 type IOrderApi =
     abstract GetProduct : int -> Async<Product>
+    abstract TryGetProduct : int -> Async<Result<Product, string>>
     abstract PlaceOrder : Order -> Async<OrderSummary>
     abstract ListProducts : unit -> Async<Product list>

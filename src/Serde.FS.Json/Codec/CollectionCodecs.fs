@@ -97,6 +97,39 @@ module CollectionCodecs =
                         listOfArrayMethod.Invoke(null, [| arr |])
                     | _ -> failwith $"Expected JSON array for %s{listType.Name}" }
 
+    /// Factory for constructing Result<'Ok,'Error> codecs dynamically from the registry.
+    module ResultCodecFactory =
+        let create (typeArgs: Type[]) (registry: CodecRegistry) : IJsonCodec =
+            let okType = typeArgs[0]
+            let errType = typeArgs[1]
+            let okCodec = CodecResolver.resolve okType registry
+            let errCodec = CodecResolver.resolve errType registry
+            let resultType = typedefof<Result<_,_>>.MakeGenericType(okType, errType)
+
+            let tagProp = resultType.GetProperty("Tag")
+            let resultValueProp = resultType.GetProperty("ResultValue")
+            let errorValueProp = resultType.GetProperty("ErrorValue")
+            let newOk = resultType.GetMethod("NewOk")
+            let newError = resultType.GetMethod("NewError")
+
+            { new IJsonCodec with
+                member _.Type = resultType
+                member _.Encode obj =
+                    match tagProp.GetValue(obj) :?> int with
+                    | 0 -> // Ok
+                        let value = resultValueProp.GetValue(obj)
+                        JsonValue.Object [ "Ok", okCodec.Encode value ]
+                    | _ -> // Error
+                        let value = errorValueProp.GetValue(obj)
+                        JsonValue.Object [ "Error", errCodec.Encode value ]
+                member _.Decode json =
+                    match json with
+                    | JsonValue.Object [ "Ok", value ] ->
+                        newOk.Invoke(null, [| okCodec.Decode value |])
+                    | JsonValue.Object [ "Error", value ] ->
+                        newError.Invoke(null, [| errCodec.Decode value |])
+                    | _ -> failwith $"Expected {{\"Ok\": ...}} or {{\"Error\": ...}} for %s{resultType.Name}" }
+
     /// Factory for constructing Map<'K,'V> codecs dynamically from the registry.
     module MapCodecFactory =
         let create (typeArgs: Type[]) (registry: CodecRegistry) : IJsonCodec =
