@@ -3,4 +3,16 @@
     <!-- Fable compiler excludes obj/ dir, so we generate types here instead. -->
     <RemoveDir Directories="$(IntermediateOutputPath)serde-generated" />
   </Target>
+
+  <!-- Auto-include generated Fable client files written by a sibling project's
+       generator when the interface is annotated with [<GenerateFableClient>].
+       Fires before CoreCompile so the F# SDK emits the files into
+       FscCommandLineArgs, which Fable's project cracker reads. -->
+  <Target Name="SerdeIncludeGeneratedFableSources"
+          BeforeTargets="CoreCompile"
+          Condition="Exists('$(MSBuildProjectDirectory)\generated-fable')">
+    <ItemGroup>
+      <Compile Include="$(MSBuildProjectDirectory)\generated-fable\*.fs" />
+    </ItemGroup>
+  </Target>
 </Project>

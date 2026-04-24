@@ -50,16 +50,15 @@ the browser can call the server without CORS setup.
 - `App.fs` calls `IOrderApiFableClient.create "/"` and invokes the RPC methods
   like any interface implementation — no reflection, no hand-written JSON.
 
-## Wiring the generated file into Shared
+## Wiring
 
-The Shared project's `.fsproj` includes the generated directory with a glob:
+Zero wiring on the Shared side: `Serde.FS`'s `buildTransitive/Serde.FS.targets`
+auto-includes any `.fs` files under `<ProjectDir>/generated-fable/` as Compile
+items before CoreCompile runs. Fable 5+ and `dotnet build` both pick them up.
 
-```xml
-<Compile Include="generated-fable\*.fs" Condition="Exists('generated-fable')" />
-```
-
-Fable's project cracker does not pick up `<Compile>` items injected via NuGet
-`buildTransitive/*.targets` files, so this one-line include is required.
+Shared only needs a `<PackageReference Include="Fable.Core" ... />` so the
+generated file's `open Fable.Core` resolves under .NET compile (it compiles as
+dead code; nothing calls it from .NET).
 
 ## Not demonstrated
 
