@@ -6,7 +6,7 @@
 [![Serde.FS.Json.AspNet](https://img.shields.io/nuget/vpre/Serde.FS.Json.AspNet.svg?label=Serde.FS.Json.AspNet)](https://www.nuget.org/packages/Serde.FS.Json.AspNet/)
 
 Serde.FS is a reflection‑free, compile‑time validated serialization and RPC framework for F#.  
-It brings Rust‑style determinism to .NET and adds a **zero‑boilerplate RPC layer** on top.
+It brings Rust‑style determinism to .NET and adds a **zero‑boilerplate RPC layer** on top — server, .NET client, and (with Fable 5+) browser‑side Fable client are all generated from a single `[<RpcApi>]` interface.
 
 ---
 
@@ -47,8 +47,7 @@ Serde.FS is composed of several focused packages:
 |--------|-------------|
 | **Serde.FS** | Core metadata + attributes used by all backends |
 | **Serde.FS.Json** | Deterministic, reflection‑free JSON backend |
-| **Serde.FS.Json.AspNet** | Integrates Serde.FS.Json into ASP.NET for RPC servers |
-| **Serde.FS.Json.Fable** 🚧 | Fable RPC client integration (in development) |
+| **Serde.FS.Json.AspNet** | Integrates Serde.FS.Json into ASP.NET for RPC servers; also emits Fable clients when interfaces are annotated with `[<GenerateFableClient>]` |
 
 Most users will install:
 
@@ -57,14 +56,35 @@ Most users will install:
 
 ---
 
-## 🌐 Coming Soon: Serde.FS.Json.Fable
+## 🌐 Fable RPC Client (Fable 5+)
 
-A first‑class Fable RPC client is in development.
-It will let you consume any `[<RpcApi>]` interface directly from a Fable project with the same zero‑boilerplate workflow:
+Annotate an `[<RpcApi>]` interface with `[<GenerateFableClient>]` and Serde will emit a ready-to-consume Fable client alongside the server codecs — same compile-time, reflection-free pipeline:
 
 ```fsharp
+[<RpcApi>]
+[<GenerateFableClient>]
+type IOrderApi =
+    abstract GetProduct : ProductId -> Async<Product>
+```
+
+The Server build writes `<Shared>/generated-fable/<ApiName>.fs` into the project that hosts the interface. `Serde.FS`'s MSBuild target auto-includes the file as a `Compile` item, so there is no manual `.fsproj` wiring. The Fable project consumes it like any interface:
+
+```fsharp
+open SampleRpc.Shared
+
+let client = IOrderApiFableClient.create "/"
 let! product = client.GetProduct(ProductId 42)
 ```
+
+The Shared project only needs one extra package:
+
+```xml
+<PackageReference Include="Fable.Core" Version="5.0.0" />
+```
+
+**Requires Fable 5 or later.** Fable 4's project cracker did not honor MSBuild-injected `Compile` items; Fable 5's rewritten cracker does.
+
+A full working end-to-end example (ASP.NET server + Lit-based Fable web client) lives under [src/Serde.FS.Json.SampleRpc.FableClient](src/Serde.FS.Json.SampleRpc.FableClient).
 
 ---
 
@@ -207,6 +227,20 @@ All routing, serialization, and client code is generated at compile time by the 
 type IOrderApi =
     abstract GetProduct : ProductId -> Async<Product>
 ```
+
+### Generating a Fable client
+
+Stack the `[<GenerateFableClient>]` attribute alongside `[<RpcApi>]` to have the Server build emit a Fable-compatible RPC proxy into the Shared project. See [🌐 Fable RPC Client](#-fable-rpc-client-fable-5) above.
+
+```fsharp
+[<RpcApi>]
+[<GenerateFableClient>]
+type IOrderApi =
+    abstract GetProduct : ProductId -> Async<Product>
+```
+
+By default the file is written to `<SharedDir>/generated-fable/<ApiName>.fs`. Override with `[<GenerateFableClient(OutputDir = "../Web/generated-fable")>]` to target a sibling project instead.
+
 ---
 
 ## 🚀 Serialization (Standalone Use)
