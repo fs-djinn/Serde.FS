@@ -53,6 +53,11 @@ type RpcInterfaceInfo = {
     /// Absolute path to the .fs file declaring the interface (when known).
     /// Used to locate the owning project for Fable client emission.
     SourceFilePath: string option
+    /// True when the interface's enclosing scope is a namespace, false when it is
+    /// a top-level module (`module Foo.Bar`). The Fable client generator can only
+    /// add files to a namespace, since multi-file additions to a top-level module
+    /// are disallowed by F#.
+    IsParentNamespace: bool
 }
 
 /// Result of RPC API discovery.

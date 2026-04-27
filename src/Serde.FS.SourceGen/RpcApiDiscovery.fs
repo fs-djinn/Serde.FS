@@ -362,10 +362,111 @@ module internal RpcApiDiscovery =
         let fullName = String.concat "." parts
         (fullName, shortName)
 
+    /// Map a primitive name to its PrimitiveKind, or None if not a primitive.
+    let private primitiveKindOf (name: string) : PrimitiveKind option =
+        match name with
+        | "unit" -> Some Unit
+        | "bool" | "Boolean" | "System.Boolean" -> Some Bool
+        | "sbyte" | "int8" | "SByte" | "System.SByte" -> Some Int8
+        | "int16" | "Int16" | "System.Int16" -> Some Int16
+        | "int" | "int32" | "Int32" | "System.Int32" -> Some Int32
+        | "int64" | "Int64" | "System.Int64" -> Some Int64
+        | "byte" | "uint8" | "Byte" | "System.Byte" -> Some UInt8
+        | "uint16" | "UInt16" | "System.UInt16" -> Some UInt16
+        | "uint32" | "UInt32" | "System.UInt32" -> Some UInt32
+        | "uint64" | "UInt64" | "System.UInt64" -> Some UInt64
+        | "float32" | "single" | "Single" | "System.Single" -> Some Float32
+        | "float" | "double" | "Double" | "System.Double" -> Some Float64
+        | "decimal" | "Decimal" | "System.Decimal" -> Some PrimitiveKind.Decimal
+        | "string" | "String" | "System.String" -> Some String
+        | "Guid" | "System.Guid" -> Some Guid
+        | "DateTime" | "System.DateTime" -> Some DateTime
+        | "DateTimeOffset" | "System.DateTimeOffset" -> Some DateTimeOffset
+        | "TimeSpan" | "System.TimeSpan" -> Some TimeSpan
+        | "DateOnly" | "System.DateOnly" -> Some DateOnly
+        | "TimeOnly" | "System.TimeOnly" -> Some TimeOnly
+        | _ -> None
+
+    let private mkPrimitiveTypeInfo (name: string) (kind: PrimitiveKind) : TypeInfo =
+        { Namespace = None
+          EnclosingModules = []
+          TypeName = name
+          Kind = Primitive kind
+          Attributes = []
+          GenericParameters = []
+          GenericArguments = [] }
+
+    /// Convert a SynType to a TypeInfo where possible. Used to surface tuple types
+    /// that appear in RPC method signatures so the generator can emit codecs for them.
+    /// Returns None for unrecognised shapes.
+    let rec private synTypeToTypeInfo (lookup: Map<string, TypeInfo>) (synType: SynType) : TypeInfo option =
+        match synType with
+        | SynType.LongIdent(SynLongIdent(id = idents)) ->
+            let name = identToString idents
+            let shortName = idents |> List.last |> fun i -> i.idText
+            match primitiveKindOf shortName with
+            | Some pk -> Some (mkPrimitiveTypeInfo shortName pk)
+            | None ->
+                match Map.tryFind name lookup with
+                | Some ti -> Some ti
+                | None -> Map.tryFind shortName lookup
+        | SynType.Tuple(_, segments, _) ->
+            // Tuple segments interleave Type entries with Star separators; only Type
+            // entries carry a SynType. We need every Type entry to resolve.
+            let typeSegments =
+                segments
+                |> List.choose (fun seg ->
+                    match seg with
+                    | SynTupleTypeSegment.Type t -> Some t
+                    | _ -> None)
+            let elemTis = typeSegments |> List.choose (synTypeToTypeInfo lookup)
+            if elemTis.Length = typeSegments.Length && elemTis.Length >= 2 then
+                let fields =
+                    elemTis
+                    |> List.mapi (fun i ti ->
+                        { Name = sprintf "Item%d" (i + 1); Type = ti; Attributes = [] } : FieldInfo)
+                Some { Namespace = None
+                       EnclosingModules = []
+                       TypeName = "tuple"
+                       Kind = Tuple fields
+                       Attributes = []
+                       GenericParameters = []
+                       GenericArguments = [] }
+            else None
+        | SynType.Paren(inner, _) ->
+            synTypeToTypeInfo lookup inner
+        | SynType.Array(rank, elementType, _) ->
+            synTypeToTypeInfo lookup elementType
+            |> Option.map (fun inner ->
+                { Namespace = None
+                  EnclosingModules = []
+                  TypeName = "array"
+                  Kind = Array inner
+                  Attributes = []
+                  GenericParameters = []
+                  GenericArguments = [] })
+        | _ -> None
+
+    /// Recursively walk a TypeInfo and collect any Tuple TypeInfos it contains
+    /// (including nested ones inside Option/List/etc.).
+    let rec private collectTuples (ti: TypeInfo) (acc: TypeInfo list) : TypeInfo list =
+        match ti.Kind with
+        | Tuple fields ->
+            let acc = fields |> List.fold (fun a f -> collectTuples f.Type a) acc
+            ti :: acc
+        | Option inner | List inner | Array inner | Set inner ->
+            collectTuples inner acc
+        | Map (k, v) ->
+            collectTuples v (collectTuples k acc)
+        | _ -> acc
+
     /// Collected data from walking [<RpcApi>] interfaces.
     type private RpcApiCollected = {
         TypeNames: ResizeArray<string>
         Interfaces: ResizeArray<RpcInterfaceInfo>
+        /// Tuple TypeInfos discovered in method input/output signatures.
+        /// These need codec generation since they aren't part of any record's fields.
+        TupleTypes: ResizeArray<TypeInfo>
     }
 
     /// Parse a single source file into an AST.
@@ -408,10 +509,11 @@ module internal RpcApiDiscovery =
         acc
 
     /// Walk a parsed AST to find [<RpcApi>] interfaces and extract type names + method info.
-    let private findRpcApis (resolve: string -> string) (aliases: Map<string, SynType>) (filePath: string) (parseTree: ParsedInput) : RpcApiCollected =
+    let private findRpcApis (resolve: string -> string) (aliases: Map<string, SynType>) (lookup: Map<string, TypeInfo>) (filePath: string) (parseTree: ParsedInput) : RpcApiCollected =
         let collected = {
             TypeNames = ResizeArray<string>()
             Interfaces = ResizeArray<RpcInterfaceInfo>()
+            TupleTypes = ResizeArray<TypeInfo>()
         }
 
         let processAbstractSlot (methods: ResizeArray<RpcMethodInfo>) (slotSig: SynValSig) =
@@ -419,8 +521,25 @@ module internal RpcApiDiscovery =
             match extractMethodInfo resolve aliases slotSig with
             | Some mi -> methods.Add(mi)
             | None -> ()
+            // Surface tuple types from input/output signatures so codecs get emitted.
+            let (SynValSig(synType = synType)) = slotSig
+            let expanded = expandAliases aliases synType
+            let walkType ti =
+                for tup in collectTuples ti [] do
+                    collected.TupleTypes.Add(tup)
+            // Walk function arrows to extract input/return shapes individually.
+            let rec walkSig st =
+                match st with
+                | SynType.Fun(arg, ret, _, _) ->
+                    walkSig arg
+                    walkSig ret
+                | _ ->
+                    match synTypeToTypeInfo lookup st with
+                    | Some ti -> walkType ti
+                    | None -> ()
+            walkSig expanded
 
-        let walkTypeDefn (ns: string option) (modules: string list) (typeDefn: SynTypeDefn) =
+        let walkTypeDefn (ns: string option) (modules: string list) (isParentNamespace: bool) (typeDefn: SynTypeDefn) =
             let (SynTypeDefn(typeInfo = synComponentInfo; typeRepr = typeRepr; members = members)) = typeDefn
             match tryGetRpcApiAttr synComponentInfo with
             | Some attrProps ->
@@ -454,17 +573,20 @@ module internal RpcApiDiscovery =
                     GenerateFableClient = fableProps.IsSome
                     FableOutputDir = fableProps |> Option.bind (fun p -> p.OutputDir)
                     SourceFilePath = Some filePath
+                    IsParentNamespace = isParentNamespace
                 })
             | None -> ()
 
-        let rec walkDecls (ns: string option) (modules: string list) (decls: SynModuleDecl list) =
+        let rec walkDecls (ns: string option) (modules: string list) (isParentNamespace: bool) (decls: SynModuleDecl list) =
             for decl in decls do
                 match decl with
                 | SynModuleDecl.Types(typeDefns, _) ->
-                    for td in typeDefns do walkTypeDefn ns modules td
+                    for td in typeDefns do walkTypeDefn ns modules isParentNamespace td
                 | SynModuleDecl.NestedModule(moduleInfo = SynComponentInfo(longId = moduleIdent); decls = nestedDecls) ->
                     let moduleName = moduleIdent |> List.map (fun i -> i.idText) |> String.concat "."
-                    walkDecls ns (modules @ [moduleName]) nestedDecls
+                    // Nested modules sit inside the parent scope; from the Fable
+                    // emitter's perspective the parent kind is unchanged.
+                    walkDecls ns (modules @ [moduleName]) isParentNamespace nestedDecls
                 | _ -> ()
 
         match parseTree with
@@ -473,12 +595,12 @@ module internal RpcApiDiscovery =
                 match kind with
                 | SynModuleOrNamespaceKind.DeclaredNamespace ->
                     let ns = Some(nsId |> List.map (fun i -> i.idText) |> String.concat ".")
-                    walkDecls ns [] decls
+                    walkDecls ns [] true decls
                 | SynModuleOrNamespaceKind.NamedModule ->
                     let moduleNames = nsId |> List.map (fun i -> i.idText)
-                    walkDecls None moduleNames decls
+                    walkDecls None moduleNames false decls
                 | _ ->
-                    walkDecls None [] decls
+                    walkDecls None [] false decls
         | _ -> ()
 
         collected
@@ -565,8 +687,11 @@ module internal RpcApiDiscovery =
         let allCollected =
             parsedFiles
             |> List.map (fun (filePath, ast) ->
-                try findRpcApis resolve aliases filePath ast
-                with _ -> { TypeNames = ResizeArray<string>(); Interfaces = ResizeArray<RpcInterfaceInfo>() })
+                try findRpcApis resolve aliases lookup filePath ast
+                with _ ->
+                    { TypeNames = ResizeArray<string>()
+                      Interfaces = ResizeArray<RpcInterfaceInfo>()
+                      TupleTypes = ResizeArray<TypeInfo>() })
 
         let rootTypeNames =
             allCollected
@@ -577,8 +702,25 @@ module internal RpcApiDiscovery =
             allCollected
             |> List.collect (fun c -> Seq.toList c.Interfaces)
 
+        // Synthetic SerdeTypeInfo for tuple types found in method signatures.
+        // De-duplicate using PascalName so identical tuple shapes are emitted once.
+        let methodTupleSerdeTypes =
+            allCollected
+            |> List.collect (fun c -> Seq.toList c.TupleTypes)
+            |> List.distinctBy typeInfoToPascalName
+            |> List.map (fun ti ->
+                { Raw = ti
+                  Capability = SerdeCapability.Both
+                  Attributes = SerdeAttributes.empty
+                  ConverterType = None
+                  CodecType = None
+                  Fields = None
+                  UnionCases = None
+                  EnumCases = None
+                  GenericContext = None } : SerdeTypeInfo)
+
         if rootTypeNames.IsEmpty then
-            { DiscoveredTypes = []; Interfaces = interfaces }
+            { DiscoveredTypes = methodTupleSerdeTypes; Interfaces = interfaces }
         else
             // Step 2: Compute transitive closure
             let allDiscoveredNames =
@@ -597,4 +739,4 @@ module internal RpcApiDiscovery =
                     | _ -> false)
                 |> List.map SerdeMetadataBuilder.buildSerdeTypeInfo
 
-            { DiscoveredTypes = discoveredTypes; Interfaces = interfaces }
+            { DiscoveredTypes = discoveredTypes @ methodTupleSerdeTypes; Interfaces = interfaces }
