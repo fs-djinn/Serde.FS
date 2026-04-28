@@ -56,7 +56,7 @@ Most users will install:
 
 ---
 
-## 🌐 Fable RPC Client (Fable 5+)
+## 🌐 Fable RPC Client
 
 Annotate an `[<RpcApi>]` interface with `[<GenerateFableClient>]` and Serde will emit a ready-to-consume Fable client alongside the server codecs — same compile-time, reflection-free pipeline:
 
@@ -82,7 +82,17 @@ The Shared project only needs one extra package:
 <PackageReference Include="Fable.Core" Version="5.0.0" />
 ```
 
-**Requires Fable 5 or later.** Fable 4's project cracker did not honor MSBuild-injected `Compile` items; Fable 5's rewritten cracker does.
+**Fable 5+ — zero wiring.** Fable 5's rewritten project cracker reads the F# SDK's resolved compile arguments, so the `Compile` items injected by Serde's MSBuild target are picked up automatically. Nothing else to do.
+
+**Fable 4 — one manual `.fsproj` edit.** Fable 4's older cracker parsed the `.fsproj` directly and ignored MSBuild-injected items, so you have to add the include yourself in your Shared project:
+
+```xml
+<ItemGroup>
+  <Compile Include="generated-fable\*.fs" />
+</ItemGroup>
+```
+
+Upgrading to Fable 5 is recommended — once you do, you can delete the snippet above.
 
 A full working end-to-end example (ASP.NET server + Lit-based Fable web client) lives under [src/Serde.FS.Json.SampleRpc.FableClient](src/Serde.FS.Json.SampleRpc.FableClient).
 
