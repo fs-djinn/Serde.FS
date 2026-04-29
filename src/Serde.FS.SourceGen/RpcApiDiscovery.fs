@@ -649,16 +649,27 @@ module internal RpcApiDiscovery =
                 else [ ti.TypeName ]
             baseName @ (ti.GenericArguments |> List.collect extractTypeNamesFromTypeInfo)
 
-    /// Resolve a short type name to its fully qualified name using the lookup map.
+    /// Resolve a (possibly partially-qualified) type name to its fully qualified name
+    /// using the lookup map. The lookup is keyed by short type name, so a reference
+    /// like `Auth.User` (User defined in nested module Auth) is resolved by falling back
+    /// to the last segment.
     let private resolveTypeName (lookup: Map<string, TypeInfo>) (name: string) : string =
-        match Map.tryFind name lookup with
-        | Some ti ->
+        let buildFqn (ti: TypeInfo) =
             let parts =
                 [ yield! ti.Namespace |> Option.toList
                   yield! ti.EnclosingModules
                   yield ti.TypeName ]
             String.concat "." parts
-        | None -> name
+        match Map.tryFind name lookup with
+        | Some ti -> buildFqn ti
+        | None ->
+            let dotIx = name.LastIndexOf '.'
+            if dotIx < 0 then name
+            else
+                let shortName = name.Substring(dotIx + 1)
+                match Map.tryFind shortName lookup with
+                | Some ti -> buildFqn ti
+                | None -> name
 
     /// Discover all types transitively referenced from [<RpcApi>] interfaces.
     /// Returns both discovered types (for codec generation) and interface metadata (for RPC dispatch modules).
