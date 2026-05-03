@@ -174,17 +174,29 @@ module internal FableClientEmitter =
     /// types : lookup from FQN → SerdeTypeInfo (for user types).
     let private resolveAtom (lookup: Map<string, SerdeTypeInfo>) (name: string) : FableTypeExpr =
         let name = name.Trim()
+        let lastSegment (s: string) =
+            let i = s.LastIndexOf('.')
+            if i >= 0 then s.Substring(i + 1) else s
         if name = "unit" then FUnit
         elif primitiveNames.Contains name then FPrim (normalizePrimitive name)
         else
-            match Map.tryFind name lookup with
+            // Try the name as-is first (matches FQN entries in the lookup), then
+            // fall back to the last segment (matches short-name entries the
+            // emitter populates for unqualified references).
+            let lookupResult =
+                match Map.tryFind name lookup with
+                | Some _ as r -> r
+                | None -> Map.tryFind (lastSegment name) lookup
+            match lookupResult with
             | Some sti ->
                 FUser (codecModuleNameFromTi sti.Raw, Types.typeInfoToFqFSharpType sti.Raw)
             | None ->
-                // Fallback: treat as user type with synthesized codec name.
-                // This covers case where user type isn't in our types map
-                // (e.g., module-local types not walked).
-                FUser (sanitize name + "Codec", name)
+                // Fallback: synthesize a codec reference using the *last segment*
+                // (matching emitTypeCodec's `sanitize ti.TypeName + "Codec"` shape).
+                // If we instead sanitized the full FQN we would emit
+                // `Foo_Bar_UserCodec` here while the emitted codec module is just
+                // `UserCodec`, producing a "not defined" error in the generated file.
+                FUser (sanitize (lastSegment name) + "Codec", name)
 
     /// Parse an F# type expression string into a FableTypeExpr.
     let rec private parseTypeString (lookup: Map<string, SerdeTypeInfo>) (raw: string) : FableTypeExpr =
@@ -227,7 +239,13 @@ module internal FableClientEmitter =
                         | "Set", [ inner ] -> FSet inner
                         | "Map", [ k; v ] -> FMap (k, v)
                         | _ ->
-                            // Try to look up the generic head in the types map
+                            // Synthesize a codec reference for an unrecognized generic.
+                            // Use the *last segment* of `head` so the name matches
+                            // emitTypeCodec's short-name shape (rather than
+                            // `Foo_Bar_HeadCodec` which never resolves).
+                            let lastSegment (s: string) =
+                                let i = s.LastIndexOf('.')
+                                if i >= 0 then s.Substring(i + 1) else s
                             let argFsTypes =
                                 args
                                 |> List.map (fun a ->
@@ -245,7 +263,7 @@ module internal FableClientEmitter =
                                         | FUser (n, _) -> n.Replace("Codec", "")
                                         | _ -> "obj")
                                     |> String.concat ""
-                                sanitize head + argCodecs + "Codec"
+                                sanitize (lastSegment head) + argCodecs + "Codec"
                             FUser (codecName, fqType)
                     else
                         resolveAtom lookup s
