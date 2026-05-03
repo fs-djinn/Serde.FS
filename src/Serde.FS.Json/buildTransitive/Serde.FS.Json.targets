@@ -15,8 +15,12 @@
 		<ItemGroup>
 			<_SerdeRefProjectDir Include="@(_SerdeJsonDirectProjectRef->'%(RootDir)%(Directory)')" />
 		</ItemGroup>
+		<!-- fable_modules\** is Fable's local cache of NuGet package .fs sources
+		     (copied during Fable compilation so they can be transpiled to JS).
+		     Excluding it keeps the [<RpcApi>] discovery scan focused on the
+		     consuming project's own sources in mixed Server/Shared/Client repos. -->
 		<CreateItem Include="%(_SerdeRefProjectDir.Identity)**\*.fs"
-					Exclude="%(_SerdeRefProjectDir.Identity)obj\**;%(_SerdeRefProjectDir.Identity)bin\**"
+					Exclude="%(_SerdeRefProjectDir.Identity)obj\**;%(_SerdeRefProjectDir.Identity)bin\**;%(_SerdeRefProjectDir.Identity)**\fable_modules\**"
 					Condition="'%(_SerdeRefProjectDir.Identity)' != ''">
 			<Output TaskParameter="Include" ItemName="_SerdeRefSourceFile" />
 		</CreateItem>
