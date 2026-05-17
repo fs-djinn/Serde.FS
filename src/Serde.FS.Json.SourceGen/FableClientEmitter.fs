@@ -577,9 +577,18 @@ module internal FableClientEmitter =
             bappend (sprintf "        trimmed + \"%s/\" + seg" basePath)
         else
             bappend (sprintf "        trimmed + \"%s/\" + methodName" basePath)
+        // Resolve a method-level type using the structural TypeInfo populated
+        // by discovery (single source of truth for codec naming). Falls back to
+        // the legacy string parser when discovery couldn't resolve the type —
+        // step 5 deletes that fallback and step 6 turns it into a build error.
+        let resolveTy (typeInfo: Types.TypeInfo option) (typeString: string) : FableTypeExpr =
+            match typeInfo with
+            | Some ti -> fromTypeInfo ti
+            | None -> parseTypeString lookup typeString
+
         bappend (sprintf "    { new %s with" iface.FullName)
         for m in iface.Methods do
-            let outputTy = parseTypeString lookup m.OutputType
+            let outputTy = resolveTy m.OutputTypeInfo m.OutputType
             if m.InputType = "unit" then
                 bappend (sprintf "        member _.%s() =" m.MethodName)
                 bappend          "            async {"
@@ -596,10 +605,19 @@ module internal FableClientEmitter =
                     m.InputParams
                     |> List.mapi (fun i ty -> sprintf "p%d: %s" i ty)
                     |> String.concat ", "
+                // Match per-param TypeInfos (populated by discovery) against the
+                // per-param strings positionally. The lists are the same length
+                // when discovery succeeded; padding with None preserves the
+                // fallback behaviour otherwise.
+                let paramTyInfos =
+                    if m.InputParamTypeInfos.Length = m.InputParams.Length then
+                        m.InputParamTypeInfos
+                    else
+                        List.replicate m.InputParams.Length None
                 let encodedArgs =
-                    m.InputParams
-                    |> List.mapi (fun i ty ->
-                        let pTy = parseTypeString lookup ty
+                    List.zip m.InputParams paramTyInfos
+                    |> List.mapi (fun i (ty, tiOpt) ->
+                        let pTy = resolveTy tiOpt ty
                         encodeExpr (sprintf "p%d" i) pTy)
                     |> String.concat "; "
                 bappend (sprintf "        member _.%s(%s) =" m.MethodName paramSig)
@@ -611,7 +629,7 @@ module internal FableClientEmitter =
                 bappend (sprintf "                return %s" (decodeExpr "json" outputTy))
                 bappend          "            }"
             else
-                let inputTy = parseTypeString lookup m.InputType
+                let inputTy = resolveTy m.InputTypeInfo m.InputType
                 bappend (sprintf "        member _.%s(arg: %s) =" m.MethodName m.InputType)
                 bappend          "            async {"
                 bappend (sprintf "                let url = fullUrl \"%s\"" m.MethodName)
