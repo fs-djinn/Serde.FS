@@ -12,6 +12,9 @@
 		<Compile Include="SerdeCodeEmitterTests.fs" />
 		<Compile Include="NestedTypeValidatorTests.fs" />
 		<Compile Include="RpcApiDiscoveryTests.fs" />
+		<Compile Include="Fable\SyntheticTypes.fs" />
+		<Compile Include="Fable\SnapshotHarness.fs" />
+		<Compile Include="Fable\FableClientEmitterTests.fs" />
 		<Compile Include="Program.fs" />
 	</ItemGroup>
 
@@ -28,6 +31,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
 		<ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj" />
+		<ProjectReference Include="..\Serde.FS.Json.SourceGen\Serde.FS.Json.SourceGen.fsproj" />
 	</ItemGroup>
 
 	<ItemGroup>

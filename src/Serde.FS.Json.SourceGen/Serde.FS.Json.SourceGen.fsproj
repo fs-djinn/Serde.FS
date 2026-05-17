@@ -13,6 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Serde.FS.SourceGen\Serde.FS.SourceGen.fsproj" />
     <PackageReference Include="FSharp.SourceDjinn.TypeModel" Version="$(SourceDjinnTypeModelVersion)" />
+    <InternalsVisibleTo Include="Serde.FS.SourceGen.Tests" />
   </ItemGroup>
 
   <ItemGroup>
