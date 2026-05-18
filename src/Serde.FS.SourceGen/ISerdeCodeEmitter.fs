@@ -85,6 +85,13 @@ type RpcDiscoveryResult = {
     /// DiscoveredTypes, but the validator needs to recognise them so a field
     /// `Id: SheetNumber` doesn't trigger "SheetNumber has no Serde metadata".
     AliasNames: Set<string>
+    /// Normalize a parser-captured field TypeInfo into its canonical form:
+    ///   • partial qualifier "Forge.Hub" → resolved FQN parts via suffix lookup
+    ///   • alias name "SheetNumber" → underlying target TypeInfo (e.g. Primitive Guid)
+    ///   • already-resolved or built-in types → returned unchanged
+    /// Used by the codec emitter so generated F# code references types by a
+    /// form that compiles in the generated module's scope.
+    ResolveFieldType: TypeInfo -> TypeInfo
 }
 
 /// Result of cross-project emission for an RPC backend.

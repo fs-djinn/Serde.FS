@@ -303,3 +303,78 @@ type IServerApi =
     let result = Serde.FS.SourceGen.SerdeGeneratorEngine.generate sourceFiles emitter
 
     Assert.That(result.Errors, Is.Empty, sprintf "Unexpected errors: %A" result.Errors)
+
+/// Regression for the CEI.BimHub generator-output errors. The parser captures
+/// field types verbatim:
+///   * `Conduit: ConduitSchedule.Conduit`  → TypeInfo with TN="ConduitSchedule.Conduit"
+///   * `Number: SheetNumber`               → TypeInfo with TN="SheetNumber" (no real type)
+/// Without normalization these flow into the codec emitter as-is and produce
+/// `IJsonCodec<ConduitSchedule.Conduit>` / `IJsonCodec<SheetNumber>` which the
+/// generated server module can't resolve in its own scope.
+///
+/// rpcDiscoveryResult.ResolveFieldType must:
+///   * Expand `SheetNumber` to the alias target (Primitive String).
+///   * Resolve `ConduitSchedule.Conduit` to its canonical FQN parts
+///     (Namespace + EnclosingModules + TypeName).
+[<Test>]
+let ``ResolveFieldType normalises partial qualifiers and expands aliases`` () =
+    let domainSource = """
+namespace CEI.BimHub.Domain
+
+module ConduitSchedule =
+    type Conduit = { Id: int }
+
+module FeederRelease =
+    type Conduit = { Id: int }
+"""
+    let apiSource = """
+module CEI.BimHub.Domain.Api
+
+open Serde.FS
+
+type SheetNumber = string
+
+type Foo = { Number: SheetNumber; Conduit: ConduitSchedule.Conduit }
+
+[<RpcApi>]
+type IServerApi =
+    abstract GetFoo : unit -> Async<Foo>
+"""
+    let allTypeInfos =
+        [ "/Domain.fs", domainSource
+          "/Api.fs", apiSource ]
+        |> List.collect (fun (path, src) -> SerdeAstParser.parseSourceAllTypes path src)
+
+    let result = RpcApiDiscovery.discover allTypeInfos [
+        "/Domain.fs", domainSource
+        "/Api.fs", apiSource
+    ]
+
+    // Locate Foo in allTypeInfos and pull its field TypeInfos as the parser
+    // captured them, then run them through ResolveFieldType.
+    let foo =
+        allTypeInfos
+        |> List.find (fun ti -> ti.TypeName = "Foo")
+    let fields =
+        match foo.Kind with
+        | FSharp.SourceDjinn.TypeModel.Types.Record fs -> fs
+        | _ -> failwith "expected Record"
+
+    let numberField = fields |> List.find (fun f -> f.Name = "Number")
+    let conduitField = fields |> List.find (fun f -> f.Name = "Conduit")
+
+    let resolvedNumber = result.ResolveFieldType numberField.Type
+    let resolvedConduit = result.ResolveFieldType conduitField.Type
+
+    // SheetNumber alias expanded to Primitive String.
+    match resolvedNumber.Kind with
+    | FSharp.SourceDjinn.TypeModel.Types.Primitive FSharp.SourceDjinn.TypeModel.Types.PrimitiveKind.String -> ()
+    | other -> Assert.Fail (sprintf "expected Primitive String, got %A" other)
+
+    // ConduitSchedule.Conduit normalised to canonical FQN parts.
+    Assert.That(resolvedConduit.Namespace, Is.EqualTo(Some "CEI.BimHub.Domain"),
+        sprintf "Namespace mismatch — got %A" resolvedConduit.Namespace)
+    Assert.That(resolvedConduit.EnclosingModules, Is.EqualTo([ "ConduitSchedule" ]),
+        sprintf "EnclosingModules mismatch — got %A" resolvedConduit.EnclosingModules)
+    Assert.That(resolvedConduit.TypeName, Is.EqualTo("Conduit"),
+        sprintf "TypeName mismatch — got %s" resolvedConduit.TypeName)

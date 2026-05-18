@@ -172,46 +172,42 @@ module private GenericDiscovery =
 
 module private FieldTypeResolver =
 
-    /// Recursively resolves unqualified type references in a TypeInfo
-    /// using a lookup map built from all parsed types.
-    let rec resolveTypeInfo (lookup: Map<string, TypeInfo>) (ti: TypeInfo) : TypeInfo =
+    /// Recursively normalise a field's TypeInfo. The single-type resolver
+    /// `resolveSingle` is provided by RpcApiDiscovery — it knows about partial
+    /// qualifiers (via suffix lookup) and F# type abbreviations. This walker
+    /// just descends through collection wrappers (Option/List/Map/Tuple/...)
+    /// and calls `resolveSingle` at each Record/Union/Enum/ConstructedGeneric
+    /// leaf so they get canonical FQN identity.
+    let rec resolveTypeInfo (resolveSingle: TypeInfo -> TypeInfo) (ti: TypeInfo) : TypeInfo =
         match ti.Kind with
         | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> ti
         | ConstructedGenericType ->
-            // Resolve the base type name and recurse into generic arguments
-            let resolved =
-                if ti.Namespace.IsNone then
-                    match Map.tryFind ti.TypeName lookup with
-                    | Some r -> { ti with Namespace = r.Namespace; EnclosingModules = r.EnclosingModules }
-                    | None -> ti
-                else ti
-            { resolved with GenericArguments = resolved.GenericArguments |> List.map (resolveTypeInfo lookup) }
+            let resolved = resolveSingle ti
+            { resolved with
+                GenericArguments = resolved.GenericArguments |> List.map (resolveTypeInfo resolveSingle) }
         | Record _ | AnonymousRecord _ | Union _ | Enum _ ->
-            if ti.Namespace.IsNone then
-                match Map.tryFind ti.TypeName lookup with
-                | Some resolved ->
-                    { ti with Namespace = resolved.Namespace; EnclosingModules = resolved.EnclosingModules }
-                | None -> ti
-            else ti
-        | Option inner -> { ti with Kind = Option (resolveTypeInfo lookup inner) }
-        | List inner -> { ti with Kind = List (resolveTypeInfo lookup inner) }
-        | Array inner -> { ti with Kind = Array (resolveTypeInfo lookup inner) }
-        | Set inner -> { ti with Kind = Set (resolveTypeInfo lookup inner) }
-        | Map (k, v) -> { ti with Kind = Map (resolveTypeInfo lookup k, resolveTypeInfo lookup v) }
+            resolveSingle ti
+        | Option inner -> { ti with Kind = Option (resolveTypeInfo resolveSingle inner) }
+        | List inner -> { ti with Kind = List (resolveTypeInfo resolveSingle inner) }
+        | Array inner -> { ti with Kind = Array (resolveTypeInfo resolveSingle inner) }
+        | Set inner -> { ti with Kind = Set (resolveTypeInfo resolveSingle inner) }
+        | Map (k, v) ->
+            { ti with Kind = Map (resolveTypeInfo resolveSingle k, resolveTypeInfo resolveSingle v) }
         | Tuple fields ->
-            { ti with Kind = Tuple (fields |> List.map (fun f -> { f with Type = resolveTypeInfo lookup f.Type })) }
+            { ti with
+                Kind = Tuple (fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle f.Type })) }
 
-    let resolveSerdeTypeInfo (lookup: Map<string, TypeInfo>) (sti: SerdeTypeInfo) : SerdeTypeInfo =
+    let resolveSerdeTypeInfo (resolveSingle: TypeInfo -> TypeInfo) (sti: SerdeTypeInfo) : SerdeTypeInfo =
         let resolvedFields =
             match sti.Fields with
             | Some fields ->
-                Some (fields |> List.map (fun f -> { f with Type = resolveTypeInfo lookup f.Type }))
+                Some (fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle f.Type }))
             | None -> None
         let resolvedUnionCases =
             match sti.UnionCases with
             | Some cases ->
                 Some (cases |> List.map (fun c ->
-                    { c with Fields = c.Fields |> List.map (fun f -> { f with Type = resolveTypeInfo lookup f.Type }) }))
+                    { c with Fields = c.Fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle f.Type }) }))
             | None -> None
         { sti with Fields = resolvedFields; UnionCases = resolvedUnionCases }
 
@@ -348,7 +344,7 @@ module SerdeGeneratorEngine =
 
         let resolvedTypes =
             parsedTypes
-            |> Seq.map (FieldTypeResolver.resolveSerdeTypeInfo lookup)
+            |> Seq.map (FieldTypeResolver.resolveSerdeTypeInfo rpcDiscoveryResult.ResolveFieldType)
             |> Seq.map (fun sti ->
                 let sti =
                     match sti.ConverterType with
@@ -379,7 +375,7 @@ module SerdeGeneratorEngine =
 
         let rootConstructed =
             rootTypeArgs
-            |> Seq.map (FieldTypeResolver.resolveTypeInfo lookup)
+            |> Seq.map (FieldTypeResolver.resolveTypeInfo rpcDiscoveryResult.ResolveFieldType)
             |> Seq.toList
             |> GenericDiscovery.discoverFromTypeInfos
 

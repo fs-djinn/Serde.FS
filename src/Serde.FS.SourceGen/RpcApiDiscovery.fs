@@ -879,6 +879,41 @@ module internal RpcApiDiscovery =
                 let fileAliases = collectAliasesFromAst ast
                 Map.fold (fun m k v -> Map.add k v m) acc fileAliases) Map.empty
 
+        // Resolve a field's parser-captured TypeInfo to its canonical FQN form.
+        //   • Alias (e.g. `type SheetNumber = Guid`) — expand to target TypeInfo
+        //     by running synTypeToTypeInfo on the alias's SynType. Returns the
+        //     primitive/structural target so the codec emitter emits e.g.
+        //     `IJsonCodec<Guid>` instead of `IJsonCodec<SheetNumber>`.
+        //   • Partial qualifier (e.g. field `Hub: Forge.Hub`, parser captures
+        //     TypeName="Forge.Hub" with empty namespace) — suffix-lookup to the
+        //     unique declaration, then copy its canonical Namespace /
+        //     EnclosingModules / TypeName onto the field's TypeInfo so
+        //     typeInfoToFqFSharpType produces the full "CEI.BimHub.Forge.Hub".
+        //   • Already-resolved or built-in types — returned unchanged.
+        //
+        // Only fires on Record / Union / Enum / AnonymousRecord /
+        // ConstructedGenericType kinds; collection wrappers (Option/List/etc.)
+        // are walked by the caller (SerdeGeneratorEngine.FieldTypeResolver).
+        let resolveFieldType (ti: TypeInfo) : TypeInfo =
+            match ti.Kind with
+            | Record _ | Union _ | Enum _ | AnonymousRecord _ | ConstructedGenericType ->
+                match Map.tryFind ti.TypeName aliases with
+                | Some aliasTarget ->
+                    match synTypeToTypeInfo resolveTI aliasTarget with
+                    | Some targetTi -> targetTi
+                    | None -> ti
+                | None ->
+                    let qualifiedName =
+                        String.concat "." (ti.EnclosingModules @ [ ti.TypeName ])
+                    match resolveTI qualifiedName with
+                    | Some resolved ->
+                        { ti with
+                            Namespace = resolved.Namespace
+                            EnclosingModules = resolved.EnclosingModules
+                            TypeName = resolved.TypeName }
+                    | None -> ti
+            | _ -> ti
+
         // Step 1: Find all [<RpcApi>] interfaces and collect type names + method info
         let allCollected =
             parsedFiles
@@ -920,7 +955,8 @@ module internal RpcApiDiscovery =
         if rootTypeNames.IsEmpty then
             { DiscoveredTypes = methodTupleSerdeTypes
               Interfaces = interfaces
-              AliasNames = aliasNames }
+              AliasNames = aliasNames
+              ResolveFieldType = resolveFieldType }
         else
             // Step 2: Compute transitive closure. `visited` accumulates FQN
             // strings of discovered types (so two different types with the same
@@ -945,4 +981,5 @@ module internal RpcApiDiscovery =
 
             { DiscoveredTypes = discoveredTypes @ methodTupleSerdeTypes
               Interfaces = interfaces
-              AliasNames = aliasNames }
+              AliasNames = aliasNames
+              ResolveFieldType = resolveFieldType }
