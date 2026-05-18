@@ -915,8 +915,12 @@ module internal RpcApiDiscovery =
                   EnumCases = None
                   GenericContext = None } : SerdeTypeInfo)
 
+        let aliasNames = aliases |> Map.toSeq |> Seq.map fst |> Set.ofSeq
+
         if rootTypeNames.IsEmpty then
-            { DiscoveredTypes = methodTupleSerdeTypes; Interfaces = interfaces }
+            { DiscoveredTypes = methodTupleSerdeTypes
+              Interfaces = interfaces
+              AliasNames = aliasNames }
         else
             // Step 2: Compute transitive closure. `visited` accumulates FQN
             // strings of discovered types (so two different types with the same
@@ -939,4 +943,6 @@ module internal RpcApiDiscovery =
                     | _ -> false)
                 |> List.map SerdeMetadataBuilder.buildSerdeTypeInfo
 
-            { DiscoveredTypes = discoveredTypes @ methodTupleSerdeTypes; Interfaces = interfaces }
+            { DiscoveredTypes = discoveredTypes @ methodTupleSerdeTypes
+              Interfaces = interfaces
+              AliasNames = aliasNames }

@@ -273,3 +273,33 @@ type IServerApi =
     Assert.That(discoveredFqns, Does.Contain "MyApp.Domain.Payload")
     Assert.That(discoveredFqns, Does.Contain "MyApp.Domain.Ok")
     Assert.That(discoveredFqns, Does.Contain "MyApp.Domain.Err")
+
+/// Regression: a record field whose type is a top-level F# type abbreviation
+/// (`type SheetNumber = Guid`) used to trigger "SheetNumber is used in
+/// serialization but does not have Serde metadata" because aliases erase at
+/// compile time and don't appear in the discovered TypeInfos. Aliases are now
+/// added to `serdeTypeNames` so the validator accepts them.
+[<Test>]
+let ``Type alias used in a field does not error "has no Serde metadata"`` () =
+    let domainSource = """
+module MyApp.Domain.Api
+
+open System
+open Serde.FS
+
+type SheetNumber = string
+type TaskId = Guid
+
+type Sheet = { Number: SheetNumber; TaskId: TaskId }
+
+[<RpcApi>]
+type IServerApi =
+    abstract GetSheet : unit -> Async<Sheet>
+"""
+    let sourceFiles = [ "/Api.fs", domainSource ]
+
+    // Run the full engine: this is where the NestedTypeValidator fires.
+    let emitter = Serde.FS.Json.SourceGen.JsonCodeEmitter() :> Serde.FS.ISerdeCodeEmitter
+    let result = Serde.FS.SourceGen.SerdeGeneratorEngine.generate sourceFiles emitter
+
+    Assert.That(result.Errors, Is.Empty, sprintf "Unexpected errors: %A" result.Errors)

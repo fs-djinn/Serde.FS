@@ -509,26 +509,33 @@ module SerdeGeneratorEngine =
             }
 
         let serdeTypeNames =
-            resolvedTypes
-            |> Seq.collect (fun t ->
-                let parts =
-                    [ yield! t.Raw.Namespace |> Option.toList
-                      yield! t.Raw.EnclosingModules
-                      yield t.Raw.TypeName ]
-                let baseName = String.concat "." parts
-                let fullName =
-                    match t.GenericContext with
-                    | Some ctx ->
-                        let argNames = ctx.GenericArguments |> List.map typeInfoToFqFSharpType
-                        sprintf "%s<%s>" baseName (String.concat ", " argNames)
-                    | None -> baseName
-                // Include the full constructed form (when generic) AND every
-                // suffix of the base name so partial-qualifier field references
-                // (e.g. "Forge.Hub") match the resolved type's full FQN.
-                seq {
-                    yield fullName
-                    yield! fqnSuffixes baseName
-                })
+            let resolvedNames =
+                resolvedTypes
+                |> Seq.collect (fun t ->
+                    let parts =
+                        [ yield! t.Raw.Namespace |> Option.toList
+                          yield! t.Raw.EnclosingModules
+                          yield t.Raw.TypeName ]
+                    let baseName = String.concat "." parts
+                    let fullName =
+                        match t.GenericContext with
+                        | Some ctx ->
+                            let argNames = ctx.GenericArguments |> List.map typeInfoToFqFSharpType
+                            sprintf "%s<%s>" baseName (String.concat ", " argNames)
+                        | None -> baseName
+                    // Include the full constructed form (when generic) AND every
+                    // suffix of the base name so partial-qualifier field references
+                    // (e.g. "Forge.Hub") match the resolved type's full FQN.
+                    seq {
+                        yield fullName
+                        yield! fqnSuffixes baseName
+                    })
+            // F# type abbreviations (`type SheetNumber = Guid`) erase at compile
+            // time and never appear as their own TypeInfo, so the validator
+            // would otherwise complain about a field declared `Id: SheetNumber`.
+            // Treat aliases as known so they pass — the underlying target
+            // (Guid/string/etc.) already has a primitive codec at runtime.
+            Seq.append resolvedNames rpcDiscoveryResult.AliasNames
             |> Set.ofSeq
         let violations = NestedTypeValidator.validate serdeTypeNames resolvedTypes
         for msg in violations do

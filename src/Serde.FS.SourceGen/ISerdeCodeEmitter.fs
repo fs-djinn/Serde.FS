@@ -80,6 +80,11 @@ type RpcDiscoveryResult = {
     DiscoveredTypes: SerdeTypeInfo list
     /// Interface metadata for RPC dispatch module generation
     Interfaces: RpcInterfaceInfo list
+    /// Names of F# type abbreviations (`type Foo = Guid`) discovered in the
+    /// source files. Aliases erase at compile time so they don't appear in
+    /// DiscoveredTypes, but the validator needs to recognise them so a field
+    /// `Id: SheetNumber` doesn't trigger "SheetNumber has no Serde metadata".
+    AliasNames: Set<string>
 }
 
 /// Result of cross-project emission for an RPC backend.
