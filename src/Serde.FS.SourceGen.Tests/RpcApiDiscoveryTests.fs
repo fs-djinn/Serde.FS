@@ -101,3 +101,51 @@ type IServerApi =
     let iface = result.Interfaces.[0]
     let getProjects = iface.Methods |> List.find (fun m -> m.MethodName = "GetProjects")
     Assert.That(getProjects.OutputType, Is.EqualTo("MyApp.Domain.Forge.Project list"))
+
+/// Regression test for the missing-codec bug surfaced in the CEI.BimHub
+/// migration: when an [<RpcApi>] interface references a type via a partial
+/// module qualifier (e.g. `Async<Auth.AuthUserResponse>`), discovery must
+/// still add that type AND its transitively-referenced types to
+/// DiscoveredTypes. Otherwise the Fable emitter generates `XxxCodec.encode`
+/// references for codec modules that were never emitted.
+[<Test>]
+let ``Types referenced via partial qualifier are present in DiscoveredTypes (root + transitive)`` () =
+    let authSource = """
+namespace MyApp.Domain
+
+module Auth =
+    type User = { Email: string }
+    type AuthUserResponse = { User: User; Token: string }
+"""
+    let apiSource = """
+module MyApp.Domain.Api
+
+open Serde.FS
+
+[<RpcApi>]
+type IServerApi =
+    abstract GetCurrentUser : unit -> Async<Auth.AuthUserResponse>
+"""
+
+    let allTypeInfos =
+        [ "/Auth.fs", authSource
+          "/Api.fs", apiSource ]
+        |> List.collect (fun (path, src) -> SerdeAstParser.parseSourceAllTypes path src)
+
+    let result =
+        RpcApiDiscovery.discover allTypeInfos [
+            "/Auth.fs", authSource
+            "/Api.fs", apiSource
+        ]
+
+    let discovered =
+        result.DiscoveredTypes
+        |> List.map (fun t -> t.Raw.TypeName)
+        |> Set.ofList
+
+    // Root type from the method signature must be discovered…
+    Assert.That(discovered, Does.Contain "AuthUserResponse",
+        sprintf "AuthUserResponse missing from DiscoveredTypes. Got: %A" discovered)
+    // …and so must its transitively-referenced field type.
+    Assert.That(discovered, Does.Contain "User",
+        sprintf "User (transitive from AuthUserResponse) missing from DiscoveredTypes. Got: %A" discovered)

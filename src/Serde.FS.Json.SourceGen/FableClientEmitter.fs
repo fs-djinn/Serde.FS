@@ -402,6 +402,31 @@ module internal FableClientEmitter =
                      in a project source file walked by Serde."
                     typeString iface.FullName
 
+        // Render a parameter type annotation. Discovery's raw string returns
+        // the unqualified name for System.* primitives (e.g. "DateTime"), which
+        // doesn't resolve in the generated file because we don't `open System`.
+        // For DateTime-family primitives, emit the System-qualified form.
+        let systemQualified (pk: Types.PrimitiveKind) : string option =
+            match pk with
+            | Types.PrimitiveKind.Guid -> Some "System.Guid"
+            | Types.PrimitiveKind.DateTime -> Some "System.DateTime"
+            | Types.PrimitiveKind.DateTimeOffset -> Some "System.DateTimeOffset"
+            | Types.PrimitiveKind.TimeSpan -> Some "System.TimeSpan"
+            | Types.PrimitiveKind.DateOnly -> Some "System.DateOnly"
+            | Types.PrimitiveKind.TimeOnly -> Some "System.TimeOnly"
+            | _ -> None
+
+        let annotation (tiOpt: Types.TypeInfo option) (fallbackStr: string) =
+            match tiOpt with
+            | Some ti ->
+                match ti.Kind with
+                | Types.Primitive pk ->
+                    match systemQualified pk with
+                    | Some s -> s
+                    | None -> Types.typeInfoToFqFSharpType ti
+                | _ -> Types.typeInfoToFqFSharpType ti
+            | None -> fallbackStr
+
         bappend (sprintf "    { new %s with" iface.FullName)
         for m in iface.Methods do
             let outputTy = resolveTy m.OutputTypeInfo m.OutputType
@@ -417,10 +442,6 @@ module internal FableClientEmitter =
                 // Multi-arg interface methods: F# treats `abstract Foo: A * B -> C` as a
                 // 2-arg method, so the override must use multi-arg syntax. We encode each
                 // parameter individually and combine into the JSON tuple-array wire format.
-                let paramSig =
-                    m.InputParams
-                    |> List.mapi (fun i ty -> sprintf "p%d: %s" i ty)
-                    |> String.concat ", "
                 // Match per-param TypeInfos (populated by discovery) against the
                 // per-param strings positionally. The lists are the same length
                 // when discovery succeeded; padding with None preserves the
@@ -430,6 +451,10 @@ module internal FableClientEmitter =
                         m.InputParamTypeInfos
                     else
                         List.replicate m.InputParams.Length None
+                let paramSig =
+                    List.zip m.InputParams paramTyInfos
+                    |> List.mapi (fun i (ty, tiOpt) -> sprintf "p%d: %s" i (annotation tiOpt ty))
+                    |> String.concat ", "
                 let encodedArgs =
                     List.zip m.InputParams paramTyInfos
                     |> List.mapi (fun i (ty, tiOpt) ->
@@ -446,7 +471,7 @@ module internal FableClientEmitter =
                 bappend          "            }"
             else
                 let inputTy = resolveTy m.InputTypeInfo m.InputType
-                bappend (sprintf "        member _.%s(arg: %s) =" m.MethodName m.InputType)
+                bappend (sprintf "        member _.%s(arg: %s) =" m.MethodName (annotation m.InputTypeInfo m.InputType))
                 bappend          "            async {"
                 bappend (sprintf "                let url = fullUrl \"%s\"" m.MethodName)
                 bappend (sprintf "                let body = Interop.stringify (%s)" (encodeExpr "arg" inputTy))

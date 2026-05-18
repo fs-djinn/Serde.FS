@@ -741,13 +741,28 @@ module internal RpcApiDiscovery =
         |> Map.ofList
 
     /// Recursively collect all type names from a TypeInfo's fields and union cases.
+    /// The `lookup` is keyed by short type name. `typeName` arrives from
+    /// `collectTypeNames` which returns identifiers as-written in source — so
+    /// when an [<RpcApi>] interface uses a partial qualifier (e.g.
+    /// `Async<Auth.User>`), `typeName` is "Auth.User" and a direct Map.tryFind
+    /// misses. Fall back to the last segment so partial qualifiers resolve.
+    /// `visited` is keyed by the resolved short name so the final
+    /// `List.choose lookup` in `discover` can find every entry.
     let rec private collectTransitiveTypeNames (lookup: Map<string, TypeInfo>) (visited: Set<string>) (typeName: string) : Set<string> =
-        if visited.Contains typeName then visited
-        else
+        let tiOpt =
             match Map.tryFind typeName lookup with
-            | None -> visited
-            | Some ti ->
-                let visited = visited.Add typeName
+            | Some _ as r -> r
+            | None ->
+                let lastDot = typeName.LastIndexOf('.')
+                if lastDot >= 0 then
+                    Map.tryFind (typeName.Substring(lastDot + 1)) lookup
+                else None
+        match tiOpt with
+        | None -> visited
+        | Some ti ->
+            if visited.Contains ti.TypeName then visited
+            else
+                let visited = visited.Add ti.TypeName
                 let fieldTypes =
                     match ti.Kind with
                     | Record fields | AnonymousRecord fields ->
