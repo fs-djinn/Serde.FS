@@ -91,3 +91,113 @@ let ``multi-case union with mixed cases`` () =
     let types = [ toSerde shapeTi ]
     let actual = FableClientEmitter.emit iface types
     SnapshotHarness.assertSnapshot "multi_case_union" actual
+
+[<Test>]
+let ``record with option field`` () =
+    let userTi =
+        record "Domain" "User" [
+            "Id",    int32Ti
+            "Email", opt stringTi
+        ]
+    let methods = [
+        methodOf "GetUser" int32Ti userTi
+    ]
+    let iface = interfaceOf "Domain" "IUserApi" methods true
+    let types = [ toSerde userTi ]
+    let actual = FableClientEmitter.emit iface types
+    SnapshotHarness.assertSnapshot "record_option_field" actual
+
+[<Test>]
+let ``record with list field`` () =
+    let cartTi =
+        record "Domain" "Cart" [
+            "Id",    int32Ti
+            "Items", listTi stringTi
+        ]
+    let methods = [
+        nullaryMethod "GetCart" cartTi
+    ]
+    let iface = interfaceOf "Domain" "ICartApi" methods true
+    let types = [ toSerde cartTi ]
+    let actual = FableClientEmitter.emit iface types
+    SnapshotHarness.assertSnapshot "record_list_field" actual
+
+[<Test>]
+let ``record referencing another record across namespaces`` () =
+    // Domain.Catalog.Product is referenced from Domain.Shop.Order — the
+    // emitter must produce a fully-qualified annotation for the cross-namespace
+    // field and reference the *short* codec name (ProductCodec, not
+    // Domain_Catalog_ProductCodec).
+    let productTi =
+        record "Domain.Catalog" "Product" [
+            "Id",    int32Ti
+            "Name",  stringTi
+            "Price", decimalTi
+        ]
+    let orderTi =
+        record "Domain.Shop" "Order" [
+            "OrderId", int32Ti
+            "Item",    productTi
+        ]
+    let methods = [
+        methodOf "PlaceOrder" orderTi int32Ti
+    ]
+    let iface = interfaceOf "Domain.Shop" "IOrderApi" methods true
+    let types = [ toSerde productTi; toSerde orderTi ]
+    let actual = FableClientEmitter.emit iface types
+    SnapshotHarness.assertSnapshot "cross_namespace_record" actual
+
+[<Test>]
+let ``single-case wrapper union (ProductId of int)`` () =
+    let productIdTi = wrapperUnion "Domain" "ProductId" "ProductId" int32Ti
+    let methods = [
+        methodOf "Lookup" productIdTi stringTi
+    ]
+    let iface = interfaceOf "Domain" "IProductApi" methods true
+    let types = [ toSerde productIdTi ]
+    let actual = FableClientEmitter.emit iface types
+    SnapshotHarness.assertSnapshot "wrapper_union" actual
+
+[<Test>]
+let ``enum with three cases`` () =
+    let statusTi = enumTi "Domain" "Status" [ "Pending"; "Active"; "Closed" ]
+    let methods = [
+        nullaryMethod "GetStatus" statusTi
+    ]
+    let iface = interfaceOf "Domain" "IStatusApi" methods true
+    let types = [ toSerde statusTi ]
+    let actual = FableClientEmitter.emit iface types
+    SnapshotHarness.assertSnapshot "enum_three_cases" actual
+
+[<Test>]
+let ``method returning Result of T, string`` () =
+    let productTi =
+        record "Domain" "Product" [
+            "Id",   int32Ti
+            "Name", stringTi
+        ]
+    let methods = [
+        methodOf "TryGetProduct" int32Ti (resultTi productTi stringTi)
+    ]
+    let iface = interfaceOf "Domain" "IOrderApi" methods true
+    let types = [ toSerde productTi ]
+    let actual = FableClientEmitter.emit iface types
+    SnapshotHarness.assertSnapshot "result_return" actual
+
+[<Test>]
+let ``method with tupled input (A * B -> C)`` () =
+    // F# treats `abstract Foo : A * B -> C` as a multi-arg method. The
+    // generated proxy member must declare each param individually
+    // (`p0: int, p1: int`) and JSON-encode them as a tuple array.
+    let productTi =
+        record "Domain" "Product" [
+            "Id",   int32Ti
+            "Name", stringTi
+        ]
+    let methods = [
+        tupledMethod "ListProductsPage" [ int32Ti; int32Ti ] (listTi productTi)
+    ]
+    let iface = interfaceOf "Domain" "IOrderApi" methods true
+    let types = [ toSerde productTi ]
+    let actual = FableClientEmitter.emit iface types
+    SnapshotHarness.assertSnapshot "tupled_input" actual
