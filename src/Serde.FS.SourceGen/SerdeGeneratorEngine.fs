@@ -492,20 +492,43 @@ module SerdeGeneratorEngine =
 
         let resolvedTypes = resolvedTypes @ (constructedSerdeTypes |> Seq.toList)
 
-        // Phase 2.5: Validate nested user-defined types have Serde metadata
+        // Phase 2.5: Validate nested user-defined types have Serde metadata.
+        // The set includes EVERY suffix of each resolved type's FQN
+        // (e.g. "CEI.BimHub.Forge.Hub" → "Hub", "Forge.Hub", "BimHub.Forge.Hub",
+        // "CEI.BimHub.Forge.Hub"). This way a field referenced via partial
+        // qualifier — `Hub : Forge.Hub`, whose TypeInfo parser captures as
+        // TypeName="Forge.Hub" with empty namespace info — still matches against
+        // the actually-discovered "CEI.BimHub.Forge.Hub". The validator only
+        // needs to catch "user forgot to annotate", so over-acceptance from
+        // multiple types sharing a suffix is acceptable.
+        let fqnSuffixes (baseName: string) : string seq =
+            let segments = baseName.Split('.')
+            seq {
+                for i in 0 .. segments.Length - 1 ->
+                    System.String.Join(".", segments, i, segments.Length - i)
+            }
+
         let serdeTypeNames =
             resolvedTypes
-            |> Seq.map (fun t ->
+            |> Seq.collect (fun t ->
                 let parts =
                     [ yield! t.Raw.Namespace |> Option.toList
                       yield! t.Raw.EnclosingModules
                       yield t.Raw.TypeName ]
                 let baseName = String.concat "." parts
-                match t.GenericContext with
-                | Some ctx ->
-                    let argNames = ctx.GenericArguments |> List.map typeInfoToFqFSharpType
-                    sprintf "%s<%s>" baseName (String.concat ", " argNames)
-                | None -> baseName)
+                let fullName =
+                    match t.GenericContext with
+                    | Some ctx ->
+                        let argNames = ctx.GenericArguments |> List.map typeInfoToFqFSharpType
+                        sprintf "%s<%s>" baseName (String.concat ", " argNames)
+                    | None -> baseName
+                // Include the full constructed form (when generic) AND every
+                // suffix of the base name so partial-qualifier field references
+                // (e.g. "Forge.Hub") match the resolved type's full FQN.
+                seq {
+                    yield fullName
+                    yield! fqnSuffixes baseName
+                })
             |> Set.ofSeq
         let violations = NestedTypeValidator.validate serdeTypeNames resolvedTypes
         for msg in violations do

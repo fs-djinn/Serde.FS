@@ -47,6 +47,95 @@ let ``record with primitive fields under a top-level module`` () =
     SnapshotHarness.assertSnapshot "record_primitives_module" actual
 
 [<Test>]
+let ``Probe: end-to-end engine vs CEI.BimHub-shaped sources`` () =
+    // Reproduce the user's structural pattern:
+    //   - A `module Forge` file (top-level module, no enclosing namespace)
+    //     defining Hub / Project.
+    //   - A Domain file under `module CEI.BimHub.Domain.X` defining a type
+    //     with fields that reference Forge types via partial qualifier.
+    //   - An interface in `module CEI.BimHub.Domain.Api` returning the
+    //     domain type.
+    // Run the FULL engine and see whether validation complains. This mirrors
+    // the CEI.BimHub failure mode where 'Forge.Hub does not have Serde
+    // metadata' fires even though Forge.Hub is, in principle, discoverable.
+    // Mimic the CEI.BimHub real-world shape: Hub/Project live deeper than
+    // just "Forge" (e.g. namespace CEI.BimHub.Forge). The Domain field
+    // references them via partial qualifier "Forge.Hub", which the parser
+    // captures as TypeName="Forge.Hub" with empty namespace info — different
+    // from the actual declaration's FQN "CEI.BimHub.Forge.Hub".
+    let forgeSource = """
+namespace CEI.BimHub.Forge
+
+type Hub = { Id: string; Name: string }
+type Project = { Id: string; HubId: string }
+"""
+    let domainSource = """
+module CEI.BimHub.Domain.ConduitSchedule
+
+type ConcurrencyErrorDetails = { Message: string }
+type ProjectWithHub = { Hub: Forge.Hub; Project: Forge.Project; Err: ConcurrencyErrorDetails }
+"""
+    let apiSource = """
+module CEI.BimHub.Domain.Api
+
+open Serde.FS
+open CEI.BimHub.Forge  // so Forge.Hub references resolve
+
+[<RpcApi>]
+type IServerApi =
+    abstract GetProjects : unit -> Async<CEI.BimHub.Domain.ConduitSchedule.ProjectWithHub>
+"""
+    let sourceFiles = [
+        "/Forge.fs", forgeSource
+        "/ConduitSchedule.fs", domainSource
+        "/Api.fs", apiSource
+    ]
+    let emitter = Serde.FS.Json.SourceGen.JsonCodeEmitter() :> Serde.FS.ISerdeCodeEmitter
+    let result = Serde.FS.SourceGen.SerdeGeneratorEngine.generate sourceFiles emitter
+
+    printfn "=== Errors ==="
+    for e in result.Errors do printfn "  %s" e
+    printfn "=== Warnings ==="
+    for w in result.Warnings do printfn "  %s" w
+    printfn "=== Sources ==="
+    for s in result.Sources do printfn "  %s (abs=%A)" s.HintName s.AbsolutePath
+
+    Assert.That(result.Errors, Is.Empty, sprintf "Unexpected errors: %A" result.Errors)
+
+[<Test>]
+let ``Probe: dump field TypeInfo for partial qualifier`` () =
+    // Diagnostic probe — not a real assertion. Just dumps what SerdeAstParser
+    // produces for a field referenced via partial qualifier (Forge.Hub) so
+    // we can see what the FieldTypeResolver / NestedTypeValidator are seeing.
+    let forgeSource = """
+module Forge
+
+type Hub = { Id: int }
+"""
+    let domainSource = """
+module MyApp.Domain
+
+type ProjectWithHub = { Hub: Forge.Hub }
+"""
+    let forgeTis = Serde.FS.SourceGen.SerdeAstParser.parseSourceAllTypes "/Forge.fs" forgeSource
+    let domainTis = Serde.FS.SourceGen.SerdeAstParser.parseSourceAllTypes "/Domain.fs" domainSource
+
+    printfn "=== Forge ==="
+    for t in forgeTis do
+        printfn "  type: NS=%A EM=%A TN=%s" t.Namespace t.EnclosingModules t.TypeName
+
+    printfn "=== Domain ==="
+    for t in domainTis do
+        printfn "  type: NS=%A EM=%A TN=%s" t.Namespace t.EnclosingModules t.TypeName
+        match t.Kind with
+        | FSharp.SourceDjinn.TypeModel.Types.Record fields ->
+            for f in fields do
+                printfn "    field %s: NS=%A EM=%A TN=%s Kind=%A"
+                    f.Name f.Type.Namespace f.Type.EnclosingModules f.Type.TypeName f.Type.Kind
+        | _ -> ()
+    Assert.Pass()
+
+[<Test>]
 let ``unresolved type yields SerdeFS102 and skips file emission`` () =
     // Build an interface whose output TypeInfo is None — simulating discovery
     // failing to resolve a type. JsonCodeEmitter.EmitCrossProjectFiles must
