@@ -884,6 +884,12 @@ module internal RpcApiDiscovery =
         //     by running synTypeToTypeInfo on the alias's SynType. Returns the
         //     primitive/structural target so the codec emitter emits e.g.
         //     `IJsonCodec<Guid>` instead of `IJsonCodec<SheetNumber>`.
+        //   • Unqualified short name with lexical-scope disambiguation: if both
+        //     `ConduitSchedule.Conduit` and `FeederRelease.Conduit` exist and a
+        //     record IN `ConduitSchedule` declares `field: Conduit`, prefer the
+        //     same-module `ConduitSchedule.Conduit` (F#'s scoping rule). Tries
+        //     `parentScope ++ ti.EnclosingModules ++ [ti.TypeName]` first, then
+        //     walks up the parent's enclosing modules.
         //   • Partial qualifier (e.g. field `Hub: Forge.Hub`, parser captures
         //     TypeName="Forge.Hub" with empty namespace) — suffix-lookup to the
         //     unique declaration, then copy its canonical Namespace /
@@ -891,10 +897,15 @@ module internal RpcApiDiscovery =
         //     typeInfoToFqFSharpType produces the full "CEI.BimHub.Forge.Hub".
         //   • Already-resolved or built-in types — returned unchanged.
         //
+        // `parentScope` is the FQN segments of the type whose field we're
+        // resolving (e.g. ["CEI"; "BimHub"; "Domain"; "ConduitSchedule"] for a
+        // field of `CEI.BimHub.Domain.ConduitSchedule.SomeRecord`). Pass [] when
+        // there's no containing type (e.g. root-level Serde<T> calls).
+        //
         // Only fires on Record / Union / Enum / AnonymousRecord /
         // ConstructedGenericType kinds; collection wrappers (Option/List/etc.)
         // are walked by the caller (SerdeGeneratorEngine.FieldTypeResolver).
-        let resolveFieldType (ti: TypeInfo) : TypeInfo =
+        let resolveFieldType (parentScope: string list) (ti: TypeInfo) : TypeInfo =
             match ti.Kind with
             | Record _ | Union _ | Enum _ | AnonymousRecord _ | ConstructedGenericType ->
                 match Map.tryFind ti.TypeName aliases with
@@ -903,9 +914,20 @@ module internal RpcApiDiscovery =
                     | Some targetTi -> targetTi
                     | None -> ti
                 | None ->
-                    let qualifiedName =
-                        String.concat "." (ti.EnclosingModules @ [ ti.TypeName ])
-                    match resolveTI qualifiedName with
+                    let userParts = ti.EnclosingModules @ [ ti.TypeName ]
+                    // Try lexical-scope candidates first: longest parent prefix
+                    // wins so the same-module type beats outer-module homonyms.
+                    let scopedCandidate =
+                        let n = List.length parentScope
+                        seq {
+                            for take in n .. -1 .. 1 do
+                                let prefix = parentScope |> List.take take
+                                yield String.concat "." (prefix @ userParts)
+                        }
+                        |> Seq.tryPick resolveTI
+                    let partialCandidate () =
+                        resolveTI (String.concat "." userParts)
+                    match scopedCandidate |> Option.orElseWith partialCandidate with
                     | Some resolved ->
                         { ti with
                             Namespace = resolved.Namespace

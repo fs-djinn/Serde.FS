@@ -363,8 +363,8 @@ type IServerApi =
     let numberField = fields |> List.find (fun f -> f.Name = "Number")
     let conduitField = fields |> List.find (fun f -> f.Name = "Conduit")
 
-    let resolvedNumber = result.ResolveFieldType numberField.Type
-    let resolvedConduit = result.ResolveFieldType conduitField.Type
+    let resolvedNumber = result.ResolveFieldType [] numberField.Type
+    let resolvedConduit = result.ResolveFieldType [] conduitField.Type
 
     // SheetNumber alias expanded to Primitive String.
     match resolvedNumber.Kind with
@@ -378,3 +378,69 @@ type IServerApi =
         sprintf "EnclosingModules mismatch — got %A" resolvedConduit.EnclosingModules)
     Assert.That(resolvedConduit.TypeName, Is.EqualTo("Conduit"),
         sprintf "TypeName mismatch — got %s" resolvedConduit.TypeName)
+
+/// Regression for the CEI.BimHub ambiguous-short-name case. When two modules
+/// declare a type with the same simple name (`ConduitSchedule.Conduit` and
+/// `FeederRelease.Conduit`), an unqualified field reference inside one of the
+/// owning modules must resolve to the SAME-module type, mirroring F#'s lexical
+/// scoping. Without parentScope-aware resolution the suffix lookup picks an
+/// arbitrary candidate, surfacing as a type-mismatch in generated server code.
+[<Test>]
+let ``ResolveFieldType prefers same-module type for ambiguous short names`` () =
+    let domainSource = """
+namespace CEI.BimHub.Domain
+
+module ConduitSchedule =
+    type Conduit = { ScheduleId: int }
+    type ConduitInstance = { Conduit: Conduit }
+
+module FeederRelease =
+    type Conduit = { ReleaseId: int }
+    type FeederConduit = { Conduit: Conduit }
+"""
+    let apiSource = """
+module CEI.BimHub.Domain.Api
+
+open Serde.FS
+
+[<RpcApi>]
+type IServerApi =
+    abstract GetSchedule : unit -> Async<ConduitSchedule.ConduitInstance>
+    abstract GetFeeder : unit -> Async<FeederRelease.FeederConduit>
+"""
+    let allTypeInfos =
+        [ "/Domain.fs", domainSource
+          "/Api.fs", apiSource ]
+        |> List.collect (fun (path, src) -> SerdeAstParser.parseSourceAllTypes path src)
+
+    let result = RpcApiDiscovery.discover allTypeInfos [
+        "/Domain.fs", domainSource
+        "/Api.fs", apiSource
+    ]
+
+    let conduitFieldOf typeName =
+        let ti =
+            allTypeInfos
+            |> List.find (fun ti ->
+                ti.TypeName = typeName
+                && ti.Namespace = Some "CEI.BimHub.Domain")
+        match ti.Kind with
+        | FSharp.SourceDjinn.TypeModel.Types.Record fs ->
+            fs |> List.find (fun f -> f.Name = "Conduit")
+        | _ -> failwith "expected Record"
+
+    // ConduitInstance lives in ConduitSchedule → its unqualified `Conduit`
+    // field must resolve to ConduitSchedule.Conduit.
+    let scheduleScope = [ "CEI"; "BimHub"; "Domain"; "ConduitSchedule" ]
+    let scheduleConduit = result.ResolveFieldType scheduleScope (conduitFieldOf "ConduitInstance").Type
+    Assert.That(scheduleConduit.EnclosingModules, Is.EqualTo([ "ConduitSchedule" ]),
+        sprintf "ConduitInstance.Conduit should resolve to ConduitSchedule.Conduit, got %A.%s"
+            scheduleConduit.EnclosingModules scheduleConduit.TypeName)
+
+    // FeederConduit lives in FeederRelease → its unqualified `Conduit` field
+    // must resolve to FeederRelease.Conduit.
+    let feederScope = [ "CEI"; "BimHub"; "Domain"; "FeederRelease" ]
+    let feederConduit = result.ResolveFieldType feederScope (conduitFieldOf "FeederConduit").Type
+    Assert.That(feederConduit.EnclosingModules, Is.EqualTo([ "FeederRelease" ]),
+        sprintf "FeederConduit.Conduit should resolve to FeederRelease.Conduit, got %A.%s"
+            feederConduit.EnclosingModules feederConduit.TypeName)

@@ -88,10 +88,17 @@ type RpcDiscoveryResult = {
     /// Normalize a parser-captured field TypeInfo into its canonical form:
     ///   • partial qualifier "Forge.Hub" → resolved FQN parts via suffix lookup
     ///   • alias name "SheetNumber" → underlying target TypeInfo (e.g. Primitive Guid)
+    ///   • unqualified name with ambiguous short name (e.g. "Conduit" when both
+    ///     `ConduitSchedule.Conduit` and `FeederRelease.Conduit` exist) →
+    ///     resolved against `parentScope` first (the FQN segments of the
+    ///     containing record/union), mirroring F#'s lexical scoping
     ///   • already-resolved or built-in types → returned unchanged
     /// Used by the codec emitter so generated F# code references types by a
     /// form that compiles in the generated module's scope.
-    ResolveFieldType: TypeInfo -> TypeInfo
+    /// First arg is `parentScope` — the FQN segments of the containing
+    /// record/union (used to disambiguate ambiguous short names via F#'s
+    /// lexical-scope rules). Pass [] when there's no containing type.
+    ResolveFieldType: string list -> TypeInfo -> TypeInfo
 }
 
 /// Result of cross-project emission for an RPC backend.

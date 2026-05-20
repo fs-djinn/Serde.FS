@@ -172,42 +172,56 @@ module private GenericDiscovery =
 
 module private FieldTypeResolver =
 
+    /// FQN segments of the type whose fields we're resolving. Used as the
+    /// `parentScope` to disambiguate unqualified short names (e.g. a field
+    /// `Conduit: Conduit` resolves to the same-module Conduit). Empty when
+    /// there's no containing type (root-level Serde<T> calls).
+    let private parentScopeOf (ti: TypeInfo) : string list =
+        let nsSegments =
+            match ti.Namespace with
+            | Some ns when not (System.String.IsNullOrWhiteSpace ns) ->
+                ns.Split('.') |> Array.toList
+            | _ -> []
+        nsSegments @ ti.EnclosingModules
+
     /// Recursively normalise a field's TypeInfo. The single-type resolver
     /// `resolveSingle` is provided by RpcApiDiscovery — it knows about partial
-    /// qualifiers (via suffix lookup) and F# type abbreviations. This walker
-    /// just descends through collection wrappers (Option/List/Map/Tuple/...)
-    /// and calls `resolveSingle` at each Record/Union/Enum/ConstructedGeneric
-    /// leaf so they get canonical FQN identity.
-    let rec resolveTypeInfo (resolveSingle: TypeInfo -> TypeInfo) (ti: TypeInfo) : TypeInfo =
+    /// qualifiers (via suffix lookup), F# type abbreviations, and lexical
+    /// scoping (via the parentScope passed in). This walker descends through
+    /// collection wrappers (Option/List/Map/Tuple/...) and calls
+    /// `resolveSingle` at each Record/Union/Enum/ConstructedGeneric leaf so
+    /// they get canonical FQN identity.
+    let rec resolveTypeInfo (resolveSingle: string list -> TypeInfo -> TypeInfo) (parentScope: string list) (ti: TypeInfo) : TypeInfo =
         match ti.Kind with
         | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> ti
         | ConstructedGenericType ->
-            let resolved = resolveSingle ti
+            let resolved = resolveSingle parentScope ti
             { resolved with
-                GenericArguments = resolved.GenericArguments |> List.map (resolveTypeInfo resolveSingle) }
+                GenericArguments = resolved.GenericArguments |> List.map (resolveTypeInfo resolveSingle parentScope) }
         | Record _ | AnonymousRecord _ | Union _ | Enum _ ->
-            resolveSingle ti
-        | Option inner -> { ti with Kind = Option (resolveTypeInfo resolveSingle inner) }
-        | List inner -> { ti with Kind = List (resolveTypeInfo resolveSingle inner) }
-        | Array inner -> { ti with Kind = Array (resolveTypeInfo resolveSingle inner) }
-        | Set inner -> { ti with Kind = Set (resolveTypeInfo resolveSingle inner) }
+            resolveSingle parentScope ti
+        | Option inner -> { ti with Kind = Option (resolveTypeInfo resolveSingle parentScope inner) }
+        | List inner -> { ti with Kind = List (resolveTypeInfo resolveSingle parentScope inner) }
+        | Array inner -> { ti with Kind = Array (resolveTypeInfo resolveSingle parentScope inner) }
+        | Set inner -> { ti with Kind = Set (resolveTypeInfo resolveSingle parentScope inner) }
         | Map (k, v) ->
-            { ti with Kind = Map (resolveTypeInfo resolveSingle k, resolveTypeInfo resolveSingle v) }
+            { ti with Kind = Map (resolveTypeInfo resolveSingle parentScope k, resolveTypeInfo resolveSingle parentScope v) }
         | Tuple fields ->
             { ti with
-                Kind = Tuple (fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle f.Type })) }
+                Kind = Tuple (fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle parentScope f.Type })) }
 
-    let resolveSerdeTypeInfo (resolveSingle: TypeInfo -> TypeInfo) (sti: SerdeTypeInfo) : SerdeTypeInfo =
+    let resolveSerdeTypeInfo (resolveSingle: string list -> TypeInfo -> TypeInfo) (sti: SerdeTypeInfo) : SerdeTypeInfo =
+        let parentScope = parentScopeOf sti.Raw
         let resolvedFields =
             match sti.Fields with
             | Some fields ->
-                Some (fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle f.Type }))
+                Some (fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle parentScope f.Type }))
             | None -> None
         let resolvedUnionCases =
             match sti.UnionCases with
             | Some cases ->
                 Some (cases |> List.map (fun c ->
-                    { c with Fields = c.Fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle f.Type }) }))
+                    { c with Fields = c.Fields |> List.map (fun f -> { f with Type = resolveTypeInfo resolveSingle parentScope f.Type }) }))
             | None -> None
         { sti with Fields = resolvedFields; UnionCases = resolvedUnionCases }
 
@@ -375,7 +389,7 @@ module SerdeGeneratorEngine =
 
         let rootConstructed =
             rootTypeArgs
-            |> Seq.map (FieldTypeResolver.resolveTypeInfo rpcDiscoveryResult.ResolveFieldType)
+            |> Seq.map (FieldTypeResolver.resolveTypeInfo rpcDiscoveryResult.ResolveFieldType [])
             |> Seq.toList
             |> GenericDiscovery.discoverFromTypeInfos
 
