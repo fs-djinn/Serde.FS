@@ -445,6 +445,61 @@ type IServerApi =
         sprintf "FeederConduit.Conduit should resolve to FeederRelease.Conduit, got %A.%s"
             feederConduit.EnclosingModules feederConduit.TypeName)
 
+/// Regression for the CEI.BimHub union-case-with-partial-qualifier bug.
+/// SourceDjinn captures `ProjectSelected of Forge.Project` as a union case
+/// field with TypeName="Forge.Project" and empty EnclosingModules. When two
+/// `Project` types exist (one in `Forge`, another in `Project` module), the
+/// resolver's scope-walk used to build synthetic candidates like
+/// `CEI.BimHub.Domain.DrawingLog.Forge.Project` and pass them through the
+/// forgiving resolver — which short-name-salvaged to `Project` (ambiguous) and
+/// returned the WRONG candidate. Scope-walk candidates must now go through
+/// the STRICT resolver (no short-name fallback), so synthetic names that
+/// don't uniquely match are rejected and the fallback uses the user-written
+/// partial-qualifier `Forge.Project` for resolution.
+[<Test>]
+let ``ResolveFieldType uses strict scope-walk for union case partial qualifier`` () =
+    let source = """
+namespace CEI.BimHub.Domain
+
+module Forge =
+    [<Serde.FS.Serde>]
+    type Project = { Id: int }
+
+module Project =
+    [<Serde.FS.Serde>]
+    type Project = { Code: string }
+
+module DrawingLog =
+    [<Serde.FS.Serde>]
+    type ProjectSelectionState =
+        | NotAuthorizedForProject
+        | ProjectSelected of Forge.Project
+"""
+    let allTypeInfos = SerdeAstParser.parseSourceAllTypes "/test.fs" source
+    let result = RpcApiDiscovery.discover allTypeInfos [ "/test.fs", source ]
+
+    // Find ProjectSelectionState's `ProjectSelected` field and resolve it.
+    let pss =
+        allTypeInfos
+        |> List.find (fun ti -> ti.TypeName = "ProjectSelectionState")
+    let projectSelectedFieldTi =
+        match pss.Kind with
+        | FSharp.SourceDjinn.TypeModel.Types.Union cases ->
+            let c = cases |> List.find (fun c -> c.CaseName = "ProjectSelected")
+            c.Fields.[0].Type
+        | _ -> failwith "expected Union"
+
+    // The parent scope of ProjectSelectionState's fields is the union's own scope.
+    let parentScope = [ "CEI"; "BimHub"; "Domain"; "DrawingLog" ]
+    let resolved = result.ResolveFieldType parentScope projectSelectedFieldTi
+
+    Assert.That(resolved.Namespace, Is.EqualTo(Some "CEI.BimHub.Domain"),
+        sprintf "Namespace mismatch — got %A" resolved.Namespace)
+    Assert.That(resolved.EnclosingModules, Is.EqualTo([ "Forge" ]),
+        sprintf "Should resolve to Forge.Project not Project.Project — got %A.%s"
+            resolved.EnclosingModules resolved.TypeName)
+    Assert.That(resolved.TypeName, Is.EqualTo("Project"))
+
 /// Regression for the second batch of CEI.BimHub validator errors:
 /// transitive discovery used to walk fields via short-name lookup so when
 /// two modules each declared a type with the same simple name and both were

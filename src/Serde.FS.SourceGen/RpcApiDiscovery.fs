@@ -773,9 +773,16 @@ module internal RpcApiDiscovery =
 
     /// Resolve a parser-captured field TypeInfo against a parent's lexical
     /// scope. Tries `parentScope ++ ti.EnclosingModules ++ [ti.TypeName]`
-    /// (longest prefix first) before falling back to the bare partial-qualifier
-    /// lookup. Returns None when no candidate matches.
+    /// (longest prefix first) using STRICT resolution (no short-name fallback —
+    /// synthetic scope-walk candidates that don't fully match must be rejected,
+    /// otherwise the forgiving fallback would arbitrarily pick a same-short-
+    /// named homonym and produce a type mismatch in generated code). After all
+    /// scope candidates fail, falls back to the bare partial-qualifier lookup
+    /// (which IS forgiving, since the user-written name might itself be a
+    /// partial qualifier that needs short-name salvage). Returns None when no
+    /// candidate matches.
     let private resolveWithScope
+            (resolveTIStrict: string -> TypeInfo option)
             (resolveTI: string -> TypeInfo option)
             (parentScope: string list)
             (ti: TypeInfo) : TypeInfo option =
@@ -787,7 +794,7 @@ module internal RpcApiDiscovery =
                     let prefix = parentScope |> List.take take
                     yield String.concat "." (prefix @ userParts)
             }
-            |> Seq.tryPick resolveTI
+            |> Seq.tryPick resolveTIStrict
         match scoped with
         | Some _ -> scoped
         | None -> resolveTI (String.concat "." userParts)
@@ -802,6 +809,7 @@ module internal RpcApiDiscovery =
     /// `visited` is keyed by FQN so two types with the same short name stay
     /// distinct.
     let rec private collectTransitive
+            (resolveTIStrict: string -> TypeInfo option)
             (resolveTI: string -> TypeInfo option)
             (visited: Set<string>)
             (ti: TypeInfo) : Set<string> =
@@ -817,7 +825,7 @@ module internal RpcApiDiscovery =
                 | _ -> []
             fields
             |> List.fold
-                (fun acc f -> collectFieldDescendants resolveTI acc parentScope f.Type)
+                (fun acc f -> collectFieldDescendants resolveTIStrict resolveTI acc parentScope f.Type)
                 visited
 
     /// Walk a single field TypeInfo, recursing into collection wrappers and
@@ -825,6 +833,7 @@ module internal RpcApiDiscovery =
     /// against `parentScope` (the enclosing type's FQN segments) so ambiguous
     /// short-name references pick the correct candidate.
     and private collectFieldDescendants
+            (resolveTIStrict: string -> TypeInfo option)
             (resolveTI: string -> TypeInfo option)
             (visited: Set<string>)
             (parentScope: string list)
@@ -832,31 +841,31 @@ module internal RpcApiDiscovery =
         match fieldTi.Kind with
         | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> visited
         | Option inner | List inner | Array inner | Set inner ->
-            collectFieldDescendants resolveTI visited parentScope inner
+            collectFieldDescendants resolveTIStrict resolveTI visited parentScope inner
         | Map (k, v) ->
-            let visited = collectFieldDescendants resolveTI visited parentScope k
-            collectFieldDescendants resolveTI visited parentScope v
+            let visited = collectFieldDescendants resolveTIStrict resolveTI visited parentScope k
+            collectFieldDescendants resolveTIStrict resolveTI visited parentScope v
         | Tuple fs ->
             fs
             |> List.fold
-                (fun acc f -> collectFieldDescendants resolveTI acc parentScope f.Type)
+                (fun acc f -> collectFieldDescendants resolveTIStrict resolveTI acc parentScope f.Type)
                 visited
         | ConstructedGenericType ->
             let argVisited =
                 fieldTi.GenericArguments
                 |> List.fold
-                    (fun acc arg -> collectFieldDescendants resolveTI acc parentScope arg)
+                    (fun acc arg -> collectFieldDescendants resolveTIStrict resolveTI acc parentScope arg)
                     visited
             if skipTypeNames.Contains fieldTi.TypeName then argVisited
             else
-                match resolveWithScope resolveTI parentScope fieldTi with
-                | Some resolved -> collectTransitive resolveTI argVisited resolved
+                match resolveWithScope resolveTIStrict resolveTI parentScope fieldTi with
+                | Some resolved -> collectTransitive resolveTIStrict resolveTI argVisited resolved
                 | None -> argVisited
         | Record _ | Union _ | Enum _ | AnonymousRecord _ ->
             if skipTypeNames.Contains fieldTi.TypeName then visited
             else
-                match resolveWithScope resolveTI parentScope fieldTi with
-                | Some resolved -> collectTransitive resolveTI visited resolved
+                match resolveWithScope resolveTIStrict resolveTI parentScope fieldTi with
+                | Some resolved -> collectTransitive resolveTIStrict resolveTI visited resolved
                 | None -> visited
 
     /// Build a map from any FQN suffix (joined by `.`) to the list of TypeInfos
@@ -874,11 +883,23 @@ module internal RpcApiDiscovery =
                 acc <- Map.add suffix (ti :: existing) acc
         acc
 
-    /// Resolve a (possibly partially-qualified) type reference to a single TypeInfo.
-    /// Prefers a unique suffix match: `Forge.Project` will pick the TypeInfo whose
-    /// FQN segments end with `["Forge"; "Project"]` even when another module defines
-    /// a type named `Project`. Falls back to short-name lookup if no suffix matches
-    /// or the suffix is ambiguous.
+    /// Strict suffix-only resolver: returns Some only when `name` matches the
+    /// FQN suffix of exactly one declared type. No short-name fallback, no
+    /// arbitrary-pick on ambiguity. Used when walking synthetic candidates
+    /// (e.g. parentScope-prepended names) — a synthetic candidate that doesn't
+    /// match exactly must be rejected; otherwise the forgiving fallback would
+    /// salvage it as a same-short-name homonym and emit the wrong codec.
+    let private resolveToTypeInfoStrict
+            (suffixLookup: Map<string, TypeInfo list>)
+            (name: string) : TypeInfo option =
+        match Map.tryFind name suffixLookup with
+        | Some [ ti ] -> Some ti
+        | _ -> None
+
+    /// Forgiving resolver: prefers a unique suffix match, then falls back to
+    /// short-name lookup. Use this for user-written names (which may be
+    /// partial qualifiers that need short-name salvage), NOT for synthetic
+    /// scope-walk candidates (use resolveToTypeInfoStrict for those).
     let private resolveToTypeInfo
             (shortLookup: Map<string, TypeInfo>)
             (suffixLookup: Map<string, TypeInfo list>)
@@ -913,6 +934,7 @@ module internal RpcApiDiscovery =
         let lookup = buildLookup allTypeInfos
         let suffixLookup = buildSuffixLookup allTypeInfos
         let resolveTI = resolveToTypeInfo lookup suffixLookup
+        let resolveTIStrict = resolveToTypeInfoStrict suffixLookup
         let resolve = resolveTypeName resolveTI
 
         // Step 0: Parse each .fs file once and collect type abbreviations globally
@@ -969,6 +991,11 @@ module internal RpcApiDiscovery =
                     let userParts = ti.EnclosingModules @ [ ti.TypeName ]
                     // Try lexical-scope candidates first: longest parent prefix
                     // wins so the same-module type beats outer-module homonyms.
+                    // STRICT resolution — a synthetic candidate that doesn't
+                    // match a unique declaration must be rejected (else the
+                    // forgiving fallback would salvage it as a homonym and
+                    // emit the wrong codec; see issue with `Forge.Project`
+                    // vs `Project.Project`).
                     let scopedCandidate =
                         let n = List.length parentScope
                         seq {
@@ -976,7 +1003,7 @@ module internal RpcApiDiscovery =
                                 let prefix = parentScope |> List.take take
                                 yield String.concat "." (prefix @ userParts)
                         }
-                        |> Seq.tryPick resolveTI
+                        |> Seq.tryPick resolveTIStrict
                     let partialCandidate () =
                         resolveTI (String.concat "." userParts)
                     match scopedCandidate |> Option.orElseWith partialCandidate with
@@ -1045,7 +1072,7 @@ module internal RpcApiDiscovery =
 
             let allDiscoveredNames =
                 rootTypeInfos
-                |> List.fold (fun acc ti -> collectTransitive resolveTI acc ti) Set.empty
+                |> List.fold (fun acc ti -> collectTransitive resolveTIStrict resolveTI acc ti) Set.empty
 
             // Step 3: Build SerdeTypeInfo for each discovered type. The FQN
             // strings in `visited` map back to the correct TypeInfo via
