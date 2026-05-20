@@ -207,6 +207,74 @@ let ``EmitResolver returns None for empty list`` () =
     let result = resolverEmitter.EmitResolver([])
     Assert.That(result.IsNone, Is.True)
 
+/// Regression for the CEI.BimHub `Duplicate definition of value 'projectJsonCodec'`
+/// case: when two types share a short TypeName but live in different modules
+/// (e.g. CEI.Domain.Forge.Project vs CEI.Domain.Project.Project), their inlined
+/// let-bindings used to collide in the consolidated resolver. The emitter must
+/// disambiguate colliding bindings by prepending the enclosing module path
+/// (PascalCase-joined) so each codec gets a unique function name.
+[<Test>]
+let ``EmitResolver disambiguates colliding short type names`` () =
+    let mkRecordInModule (ns: string) (enclosingModule: string) (typeName: string) (fields: SerdeFieldInfo list) : SerdeTypeInfo =
+        let rawFields =
+            fields |> List.map (fun f -> { Name = f.RawName; Type = f.Type; Attributes = [] } : Types.FieldInfo)
+        {
+            Raw = {
+                Namespace = Some ns
+                EnclosingModules = [ enclosingModule ]
+                TypeName = typeName
+                Kind = Record rawFields
+                Attributes = []
+                GenericParameters = []
+                GenericArguments = []
+            }
+            Capability = Both
+            Attributes = SerdeAttributes.empty
+            ConverterType = None
+            CodecType = None
+            Fields = Some fields
+            UnionCases = None
+            EnumCases = None
+            GenericContext = None
+        }
+
+    let types = [
+        mkRecordInModule "CEI.Domain" "Forge" "Project" [ mkField "Id" "int" Int32 ]
+        mkRecordInModule "CEI.Domain" "Project" "Project" [ mkField "Code" "string" String ]
+    ]
+
+    let result = resolverEmitter.EmitResolver(types)
+    Assert.That(result.IsSome, Is.True)
+    let code = result.Value
+
+    // Both disambiguated let-bindings must be present and distinct.
+    Assert.That(code, Does.Contain("forgeProjectJsonCodec"),
+        "forgeProjectJsonCodec missing — colliding type wasn't disambiguated")
+    Assert.That(code, Does.Contain("projectProjectJsonCodec"),
+        "projectProjectJsonCodec missing — colliding type wasn't disambiguated")
+
+    // The unqualified `projectJsonCodec` must not appear AS A LET BINDING
+    // (it would create the duplicate-definition error). Check for the
+    // characteristic prefix.
+    let bareCount =
+        let needle = "let private projectJsonCodec "
+        let mutable i = 0
+        let mutable count = 0
+        while i >= 0 do
+            i <- code.IndexOf(needle, i)
+            if i >= 0 then
+                count <- count + 1
+                i <- i + needle.Length
+        count
+    Assert.That(bareCount, Is.EqualTo(0),
+        "bare `let private projectJsonCodec` would collide — got count=" + string bareCount)
+
+    // Each FQN must be registered against its corresponding disambiguated codec.
+    Assert.That(code, Does.Contain("typeof<CEI.Domain.Forge.Project>"))
+    Assert.That(code, Does.Contain("typeof<CEI.Domain.Project.Project>"))
+    Assert.That(code, Does.Contain("boxCodec forgeProjectJsonCodec"))
+    Assert.That(code, Does.Contain("boxCodec projectProjectJsonCodec"))
+
 [<Test>]
 let ``Emits codec for option int`` () =
     let info = mkOptionInfo (mkPrimType "int" Int32)
