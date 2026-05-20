@@ -759,53 +759,105 @@ module internal RpcApiDiscovery =
     let private buildFqn (ti: TypeInfo) =
         typeInfoFqnSegments ti |> String.concat "."
 
-    /// Recursively collect all type names from a TypeInfo's fields and union cases.
-    /// `resolveTI` is the disambiguating resolver (suffix-lookup based): it picks
-    /// the right TypeInfo when a partial qualifier like `Forge.Hub` overlaps with
-    /// another `Hub` in a different namespace. `visited` is keyed by FQN so two
-    /// types with the same short name don't collapse onto each other.
-    let rec private collectTransitiveTypeNames
+    /// Parent scope (FQN segments) of a resolved root TypeInfo — used to
+    /// disambiguate field-type references that share a short name with another
+    /// declaration. For a record at `CEI.BimHub.Domain.ConduitSchedule.Foo`,
+    /// returns `["CEI"; "BimHub"; "Domain"; "ConduitSchedule"]`.
+    let private parentScopeOfTypeInfo (ti: TypeInfo) : string list =
+        let nsSegments =
+            match ti.Namespace with
+            | Some ns when not (System.String.IsNullOrWhiteSpace ns) ->
+                ns.Split('.') |> Array.toList
+            | _ -> []
+        nsSegments @ ti.EnclosingModules
+
+    /// Resolve a parser-captured field TypeInfo against a parent's lexical
+    /// scope. Tries `parentScope ++ ti.EnclosingModules ++ [ti.TypeName]`
+    /// (longest prefix first) before falling back to the bare partial-qualifier
+    /// lookup. Returns None when no candidate matches.
+    let private resolveWithScope
+            (resolveTI: string -> TypeInfo option)
+            (parentScope: string list)
+            (ti: TypeInfo) : TypeInfo option =
+        let userParts = ti.EnclosingModules @ [ ti.TypeName ]
+        let scoped =
+            let n = List.length parentScope
+            seq {
+                for take in n .. -1 .. 1 do
+                    let prefix = parentScope |> List.take take
+                    yield String.concat "." (prefix @ userParts)
+            }
+            |> Seq.tryPick resolveTI
+        match scoped with
+        | Some _ -> scoped
+        | None -> resolveTI (String.concat "." userParts)
+
+    /// Recursively collect FQNs of all types transitively reachable from `ti`'s
+    /// fields and union-case fields. `parentScope` of nested-field resolution
+    /// is derived from each parent's FQN as we descend, so unqualified field
+    /// references like `Conduit: Conduit` in module `ConduitSchedule` resolve
+    /// to `ConduitSchedule.Conduit` (and the homonym in `FeederRelease` to
+    /// `FeederRelease.Conduit`). Both candidates are discovered when both are
+    /// referenced — the previous string-keyed walker collapsed them onto one.
+    /// `visited` is keyed by FQN so two types with the same short name stay
+    /// distinct.
+    let rec private collectTransitive
             (resolveTI: string -> TypeInfo option)
             (visited: Set<string>)
-            (typeName: string) : Set<string> =
-        match resolveTI typeName with
-        | None -> visited
-        | Some ti ->
-            let identifier = buildFqn ti
-            if visited.Contains identifier then visited
-            else
-                let visited = visited.Add identifier
-                let fieldTypes =
-                    match ti.Kind with
-                    | Record fields | AnonymousRecord fields ->
-                        fields |> List.collect (fun f -> extractTypeNamesFromTypeInfo f.Type)
-                    | Union cases ->
-                        cases |> List.collect (fun c -> c.Fields |> List.collect (fun f -> extractTypeNamesFromTypeInfo f.Type))
-                    | _ -> []
-                fieldTypes
-                |> List.filter (fun n -> not (skipTypeNames.Contains n))
-                |> List.fold (fun acc n -> collectTransitiveTypeNames resolveTI acc n) visited
+            (ti: TypeInfo) : Set<string> =
+        let identifier = buildFqn ti
+        if visited.Contains identifier then visited
+        else
+            let visited = visited.Add identifier
+            let parentScope = parentScopeOfTypeInfo ti
+            let fields =
+                match ti.Kind with
+                | Record fs | AnonymousRecord fs -> fs
+                | Union cs -> cs |> List.collect (fun c -> c.Fields)
+                | _ -> []
+            fields
+            |> List.fold
+                (fun acc f -> collectFieldDescendants resolveTI acc parentScope f.Type)
+                visited
 
-    /// Extract type names from a SourceDjinn TypeInfo, unwrapping collections/options.
-    /// Returns the FQN (built via buildFqn) so the resolver's suffix lookup can
-    /// disambiguate when two types share a short name (e.g. `Forge.Hub`).
-    and private extractTypeNamesFromTypeInfo (ti: TypeInfo) : string list =
-        match ti.Kind with
-        | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> []
-        | Record _ | Union _ | Enum _ | AnonymousRecord _ ->
-            if skipTypeNames.Contains ti.TypeName then []
-            else [ buildFqn ti ]
+    /// Walk a single field TypeInfo, recursing into collection wrappers and
+    /// constructed-generic arguments. At each Record/Union/Enum leaf, resolve
+    /// against `parentScope` (the enclosing type's FQN segments) so ambiguous
+    /// short-name references pick the correct candidate.
+    and private collectFieldDescendants
+            (resolveTI: string -> TypeInfo option)
+            (visited: Set<string>)
+            (parentScope: string list)
+            (fieldTi: TypeInfo) : Set<string> =
+        match fieldTi.Kind with
+        | Primitive _ | GenericParameter _ | GenericTypeDefinition _ -> visited
         | Option inner | List inner | Array inner | Set inner ->
-            extractTypeNamesFromTypeInfo inner
+            collectFieldDescendants resolveTI visited parentScope inner
         | Map (k, v) ->
-            extractTypeNamesFromTypeInfo k @ extractTypeNamesFromTypeInfo v
-        | Tuple fields ->
-            fields |> List.collect (fun f -> extractTypeNamesFromTypeInfo f.Type)
+            let visited = collectFieldDescendants resolveTI visited parentScope k
+            collectFieldDescendants resolveTI visited parentScope v
+        | Tuple fs ->
+            fs
+            |> List.fold
+                (fun acc f -> collectFieldDescendants resolveTI acc parentScope f.Type)
+                visited
         | ConstructedGenericType ->
-            let baseName =
-                if skipTypeNames.Contains ti.TypeName then []
-                else [ buildFqn ti ]
-            baseName @ (ti.GenericArguments |> List.collect extractTypeNamesFromTypeInfo)
+            let argVisited =
+                fieldTi.GenericArguments
+                |> List.fold
+                    (fun acc arg -> collectFieldDescendants resolveTI acc parentScope arg)
+                    visited
+            if skipTypeNames.Contains fieldTi.TypeName then argVisited
+            else
+                match resolveWithScope resolveTI parentScope fieldTi with
+                | Some resolved -> collectTransitive resolveTI argVisited resolved
+                | None -> argVisited
+        | Record _ | Union _ | Enum _ | AnonymousRecord _ ->
+            if skipTypeNames.Contains fieldTi.TypeName then visited
+            else
+                match resolveWithScope resolveTI parentScope fieldTi with
+                | Some resolved -> collectTransitive resolveTI visited resolved
+                | None -> visited
 
     /// Build a map from any FQN suffix (joined by `.`) to the list of TypeInfos
     /// whose FQN ends with that suffix. This lets a partially-qualified reference
@@ -980,17 +1032,24 @@ module internal RpcApiDiscovery =
               AliasNames = aliasNames
               ResolveFieldType = resolveFieldType }
         else
-            // Step 2: Compute transitive closure. `visited` accumulates FQN
-            // strings of discovered types (so two different types with the same
-            // short name don't collapse).
-            let allDiscoveredNames =
+            // Step 2: Compute transitive closure. Resolve each root method-arg
+            // name to a TypeInfo, then descend through its fields with
+            // parent-scope-aware resolution at each Record/Union/Enum leaf.
+            // `visited` accumulates canonical FQN strings (so two different
+            // types sharing a short name stay distinct).
+            let rootTypeInfos =
                 rootTypeNames
                 |> List.filter (fun n -> not (skipTypeNames.Contains n))
-                |> List.fold (fun acc name -> collectTransitiveTypeNames resolveTI acc name) Set.empty
+                |> List.choose resolveTI
+                |> List.distinctBy buildFqn
 
-            // Step 3: Build SerdeTypeInfo for each discovered type. Use
-            // resolveTI (suffix lookup) so the FQN strings stored in `visited`
-            // map back to the correct TypeInfo even when they share short names.
+            let allDiscoveredNames =
+                rootTypeInfos
+                |> List.fold (fun acc ti -> collectTransitive resolveTI acc ti) Set.empty
+
+            // Step 3: Build SerdeTypeInfo for each discovered type. The FQN
+            // strings in `visited` map back to the correct TypeInfo via
+            // resolveTI (suffix lookup is unique when the FQN is given in full).
             let discoveredTypes =
                 allDiscoveredNames
                 |> Set.toList

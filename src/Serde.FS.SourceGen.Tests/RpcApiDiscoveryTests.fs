@@ -444,3 +444,82 @@ type IServerApi =
     Assert.That(feederConduit.EnclosingModules, Is.EqualTo([ "FeederRelease" ]),
         sprintf "FeederConduit.Conduit should resolve to FeederRelease.Conduit, got %A.%s"
             feederConduit.EnclosingModules feederConduit.TypeName)
+
+/// Regression for the second batch of CEI.BimHub validator errors:
+/// transitive discovery used to walk fields via short-name lookup so when
+/// two modules each declared a type with the same simple name and both were
+/// referenced (one from each owning module), only one got discovered. The
+/// validator then rejected the other. Discovery now walks TypeInfo directly
+/// with parent-scope resolution so BOTH candidates get pulled in.
+[<Test>]
+let ``Transitive discovery includes both same-short-name types when both are referenced`` () =
+    let domainSource = """
+namespace CEI.BimHub.Domain
+
+[<Serde.FS.Serde>]
+type ScheduleLookup = { ScheduleId: int }
+
+[<Serde.FS.Serde>]
+type ReleaseLookup = { ReleaseId: int }
+"""
+
+    let scheduleSource = """
+namespace CEI.BimHub.Domain
+
+module ConduitSchedule =
+    [<Serde.FS.Serde>]
+    type FeederTagWireLookup = { Schedule: ScheduleLookup }
+
+    [<Serde.FS.Serde>]
+    type Conduit = { Lookup: FeederTagWireLookup }
+"""
+
+    let releaseSource = """
+namespace CEI.BimHub.Domain
+
+module FeederRelease =
+    [<Serde.FS.Serde>]
+    type FeederTagWireLookup = { Release: ReleaseLookup }
+
+    [<Serde.FS.Serde>]
+    type Conduit = { Lookup: FeederTagWireLookup }
+"""
+
+    let apiSource = """
+module CEI.BimHub.Domain.Api
+
+open Serde.FS
+
+[<RpcApi>]
+type IServerApi =
+    abstract GetSchedule : unit -> Async<ConduitSchedule.Conduit>
+    abstract GetRelease : unit -> Async<FeederRelease.Conduit>
+"""
+    let sources = [
+        "/Domain.fs", domainSource
+        "/Schedule.fs", scheduleSource
+        "/Release.fs", releaseSource
+        "/Api.fs", apiSource
+    ]
+    let allTypeInfos =
+        sources |> List.collect (fun (path, src) -> SerdeAstParser.parseSourceAllTypes path src)
+
+    let result = RpcApiDiscovery.discover allTypeInfos sources
+
+    let fqn (sti: Serde.FS.SerdeTypeInfo) =
+        let raw = sti.Raw
+        [ yield! raw.Namespace |> Option.toList
+          yield! raw.EnclosingModules
+          yield raw.TypeName ]
+        |> String.concat "."
+
+    let discoveredFqns = result.DiscoveredTypes |> List.map fqn |> Set.ofList
+
+    Assert.That(discoveredFqns.Contains "CEI.BimHub.Domain.ConduitSchedule.FeederTagWireLookup", Is.True,
+        sprintf "ConduitSchedule.FeederTagWireLookup missing — discovered: %A" discoveredFqns)
+    Assert.That(discoveredFqns.Contains "CEI.BimHub.Domain.FeederRelease.FeederTagWireLookup", Is.True,
+        sprintf "FeederRelease.FeederTagWireLookup missing — discovered: %A" discoveredFqns)
+    Assert.That(discoveredFqns.Contains "CEI.BimHub.Domain.ConduitSchedule.Conduit", Is.True,
+        sprintf "ConduitSchedule.Conduit missing — discovered: %A" discoveredFqns)
+    Assert.That(discoveredFqns.Contains "CEI.BimHub.Domain.FeederRelease.Conduit", Is.True,
+        sprintf "FeederRelease.Conduit missing — discovered: %A" discoveredFqns)
