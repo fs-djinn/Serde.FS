@@ -1,15 +1,16 @@
 <Project>
   <Target Name="SerdeSourceGenClean" AfterTargets="Clean">
-    <!-- Remove this project's Serde-generated artefacts on Clean:
-         * obj/serde-generated      — codecs / dispatch / entry-point
-         * fable-generated/         — Fable client written by a sibling
-                                       backend project's generator
-         The Fable client folder lives in the project's *source* tree (Fable
-         excludes obj/), so we deliberately remove it here. After a Clean you
-         must rebuild the backend project (e.g., the ASP.NET server) to
-         regenerate the Fable client — Domain alone has no generator. -->
+    <!-- Remove this project's own Serde-generated artefacts on Clean:
+         obj/serde-generated/ — codecs / dispatch / entry-point.
+         Do NOT remove fable-generated/ here: this targets file is imported by
+         every project that references Serde.FS (including Shared/Domain
+         projects), but the fable-generated/ folder is OWNED by the backend
+         project's generator (Serde.FS.Json). If we cleaned it here, a
+         WebFable Rebuild that transitively cleans Shared would wipe the file
+         before WebFable's compile sees it, breaking the Fable client. The
+         owner-driven cleanup lives in Serde.FS.Json.targets's
+         SerdeJsonCleanFableClients target. -->
     <RemoveDir Directories="$(IntermediateOutputPath)serde-generated" />
-    <RemoveDir Directories="$(MSBuildProjectDirectory)\fable-generated" />
   </Target>
 
   <!-- Auto-include generated Fable client files written by a sibling project's
