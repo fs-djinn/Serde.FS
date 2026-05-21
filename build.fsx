@@ -7,19 +7,21 @@ open Fun.Build
 // Paths
 // ---------------------------------------------------------------------------
 
-let serdeFSProj       = "src/Serde.FS/Serde.FS.fsproj"
-let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
-let generatorHostProj = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
-let jsonProj          = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
-let aspNetProj        = "src/Serde.FS.Json.AspNet/Serde.FS.Json.AspNet.fsproj"
-let buildDir          = ".build"
+let serdeFSProj            = "src/Serde.FS/Serde.FS.fsproj"
+let sourceGenProj          = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
+let generatorHostProj      = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
+let fableGeneratorHostProj = "src/Serde.FS.Json.Fable.GeneratorHost/Serde.FS.Json.Fable.GeneratorHost.fsproj"
+let jsonProj               = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
+let aspNetProj             = "src/Serde.FS.Json.AspNet/Serde.FS.Json.AspNet.fsproj"
+let fableProj              = "src/Serde.FS.Json.Fable/Serde.FS.Json.Fable.fsproj"
+let buildDir               = ".build"
 
 // ---------------------------------------------------------------------------
 // Pipeline: build (default)
 // ---------------------------------------------------------------------------
 
 pipeline "build" {
-    description "Build and pack Serde.FS, Serde.FS.SourceGen, Serde.FS.Json, and Serde.FS.Json.AspNet"
+    description "Build and pack Serde.FS, Serde.FS.SourceGen, Serde.FS.Json, Serde.FS.Json.AspNet, and Serde.FS.Json.Fable"
 
     stage "Prepare output directory" {
         run (fun _ ->
@@ -43,8 +45,9 @@ pipeline "build" {
         run $"dotnet pack {serdeFSProj} -c Release -o {buildDir}"
     }
 
-    stage "Publish GeneratorHost" {
+    stage "Publish GeneratorHosts" {
         run $"dotnet publish {generatorHostProj} -c Release"
+        run $"dotnet publish {fableGeneratorHostProj} -c Release"
     }
 
     stage "Pack Serde.FS.Json" {
@@ -57,6 +60,14 @@ pipeline "build" {
     stage "Pack Serde.FS.Json.AspNet" {
         run $"dotnet clean {aspNetProj}"
         run $"dotnet pack {aspNetProj} -c Release -o {buildDir}"
+    }
+
+    stage "Pack Serde.FS.Json.Fable" {
+        // Restore using the locally packed Serde.FS (the runtime dep — the
+        // Fable generator host's publish output was produced above).
+        run $"""dotnet restore {fableProj} --source {Path.GetFullPath(buildDir)} --source "https://api.nuget.org/v3/index.json" """
+        run $"dotnet clean {fableProj}"
+        run $"dotnet pack {fableProj} -c Release -o {buildDir}"
     }
 
     stage "Summary" {
