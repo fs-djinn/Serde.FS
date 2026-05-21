@@ -6,10 +6,11 @@
 
 	<ItemGroup>
 		<PackageReference Include="Serde.FS" Version="$(SerdeFSVersion)" />
-		<!-- Fable.Core is only needed when this project is consumed by Fable
-		     (e.g., by the FableClient sample). Under .NET compilation, the
-		     generated Fable client is elided via #if FABLE_COMPILER. -->
-		<PackageReference Include="Fable.Core" Version="5.0.0" />
+		<!-- Fable.Core used to live here when the server-side build wrote
+		     the Fable client into this Shared project. After the refactor,
+		     Fable client generation moved to the FableClient project (which
+		     installs Serde.FS.Json.Fable + Fable.Core); Shared no longer
+		     needs Fable.Core. -->
 	</ItemGroup>
 
 	<ItemGroup>

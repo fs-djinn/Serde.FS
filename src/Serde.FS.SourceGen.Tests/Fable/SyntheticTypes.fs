@@ -230,7 +230,5 @@ let interfaceOf
       Root = None
       Version = None
       UrlCaseValue = 0
-      GenerateFableClient = true
-      FableOutputDir = None
       SourceFilePath = None
       IsParentNamespace = isParentNamespace }

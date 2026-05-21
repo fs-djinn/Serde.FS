@@ -59,18 +59,14 @@ type RpcInterfaceInfo = {
     Version: string option
     /// UrlCase value from [<RpcApi(UrlCase = ...)>]. 0=Default, 1=Kebab.
     UrlCaseValue: int
-    /// True when [<GenerateFableClient>] is present on the interface.
-    GenerateFableClient: bool
-    /// Custom output directory from [<GenerateFableClient(OutputDir = "...")>].
-    /// Relative paths are resolved against the interface's source file directory.
-    FableOutputDir: string option
     /// Absolute path to the .fs file declaring the interface (when known).
-    /// Used to locate the owning project for Fable client emission.
+    /// Used by emitters for MSBuild-format error diagnostics.
     SourceFilePath: string option
-    /// True when the interface's enclosing scope is a namespace, false when it is
-    /// a top-level module (`module Foo.Bar`). The Fable client generator can only
-    /// add files to a namespace, since multi-file additions to a top-level module
-    /// are disallowed by F#.
+    /// True when the interface's enclosing scope is a namespace, false when
+    /// it is a top-level module (`module Foo.Bar`). Emitters that produce a
+    /// sibling module (e.g. the Fable client) need to know which shape to
+    /// generate because F# disallows multi-file additions to a top-level
+    /// module.
     IsParentNamespace: bool
 }
 

@@ -74,14 +74,16 @@ let main argv =
         if not (List.isEmpty result.Errors) then
             1
         else
-            let generatedFiles = System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
-            let crossProjectDirs = System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+            // Write generated codecs/dispatch into this project's own
+            // obj/serde-generated/ folder. Fable client generation is now
+            // owned by the Serde.FS.Json.Fable package on the Fable
+            // consumer project — this Server-side host never writes
+            // outside its own output dir.
+            let generatedFiles =
+                System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
 
             for source in result.Sources do
-                let outputFile =
-                    match source.AbsolutePath with
-                    | Some p -> p
-                    | None -> Path.Combine(outputDir, source.HintName)
+                let outputFile = Path.Combine(outputDir, source.HintName)
                 let parentDir = Path.GetDirectoryName(outputFile)
                 if not (System.String.IsNullOrEmpty parentDir) && not (Directory.Exists parentDir) then
                     Directory.CreateDirectory parentDir |> ignore
@@ -92,40 +94,13 @@ let main argv =
                 | Some existing when existing = source.Code -> ()
                 | _ -> File.WriteAllText(outputFile, source.Code)
                 generatedFiles.Add outputFile |> ignore
-                if source.AbsolutePath.IsSome && not (System.String.IsNullOrEmpty parentDir) then
-                    crossProjectDirs.Add parentDir |> ignore
 
-            // Drop a self-ignoring .gitignore into each cross-project output directory
-            // (e.g. Shared/fable-generated/). The file contains just "*", which makes
-            // git ignore everything in the folder including the .gitignore itself, so
-            // users never see the generated files or the marker file in `git status`.
-            // Cannot live in obj/ because Fable's project cracker strips obj/ paths.
-            for dir in crossProjectDirs do
-                let gitignorePath = Path.Combine(dir, ".gitignore")
-                if not (File.Exists gitignorePath) then
-                    File.WriteAllText(gitignorePath, "*\n")
-
-            // Remove stale generated files we own:
-            //   • obj/serde-generated/*.json.g.fs (per-type codecs, dispatch
-            //     modules, resolver) — pattern-scoped so we don't touch
-            //     unrelated files in obj/.
-            //   • cross-project dirs (e.g. <Shared>/fable-generated/) — every
-            //     .fs file in there is ours; deleting any that we didn't just
-            //     write this run cleans up renames (e.g. the legacy
-            //     `IServerApi.fs` after migrating to `~IServerApi.fable.g.fs`)
-            //     and removes clients for interfaces that lost their
-            //     [<GenerateFableClient>] attribute. The `.gitignore` marker
-            //     stays because it's not a .fs file.
+            // Remove stale *.json.g.fs files (codecs/dispatch/resolver) that
+            // we no longer emit — pattern-scoped so we don't touch unrelated
+            // files in obj/.
             if Directory.Exists outputDir then
-                for ext in ["*.json.g.fs"] do
-                    for existingFile in Directory.GetFiles(outputDir, ext) do
-                        if not (generatedFiles.Contains existingFile) then
-                            File.Delete existingFile
-
-            for dir in crossProjectDirs do
-                if Directory.Exists dir then
-                    for existingFile in Directory.GetFiles(dir, "*.fs") do
-                        if not (generatedFiles.Contains existingFile) then
-                            File.Delete existingFile
+                for existingFile in Directory.GetFiles(outputDir, "*.json.g.fs") do
+                    if not (generatedFiles.Contains existingFile) then
+                        File.Delete existingFile
 
             0

@@ -12,11 +12,14 @@ let serdeFSProj       = "src/Serde.FS/Serde.FS.fsproj"
 let sourceGenProj     = "src/Serde.FS.SourceGen/Serde.FS.SourceGen.fsproj"
 let generatorHostProj    = "src/Serde.FS.Json.GeneratorHost/Serde.FS.Json.GeneratorHost.fsproj"
 let stjGeneratorHostProj = "src/Serde.FS.SystemTextJson.GeneratorHost/Serde.FS.SystemTextJson.GeneratorHost.fsproj"
+let fableGeneratorHostProj = "src/Serde.FS.Json.Fable.GeneratorHost/Serde.FS.Json.Fable.GeneratorHost.fsproj"
 let stjProj           = "src/Serde.FS.Json/Serde.FS.Json.fsproj"
 let stjSystemTextJsonProj = "src/Serde.FS.SystemTextJson/Serde.FS.SystemTextJson.fsproj"
+let fableProj         = "src/Serde.FS.Json.Fable/Serde.FS.Json.Fable.fsproj"
 let sampleRpcSharedProj = "src/Serde.FS.Json.SampleRpc.Shared/Serde.FS.Json.SampleRpc.Shared.fsproj"
 let sampleRpcServerProj = "src/Serde.FS.Json.SampleRpc.Server/Serde.FS.Json.SampleRpc.Server.fsproj"
 let sampleRpcClientProj = "src/Serde.FS.Json.SampleRpc.Client/Serde.FS.Json.SampleRpc.Client.fsproj"
+let sampleRpcFableClientProj = "src/Serde.FS.Json.SampleRpc.FableClient/Serde.FS.Json.SampleRpc.FableClient.fsproj"
 let sampleAppProj     = "src/Serde.FS.Json.SampleApp/Serde.FS.Json.SampleApp.fsproj"
 let sourceGenTestProj = "src/Serde.FS.SourceGen.Tests/Serde.FS.SourceGen.Tests.fsproj"
 let jsonTestProj      = "src/Serde.FS.Json.Tests/Serde.FS.Json.Tests.fsproj"
@@ -38,6 +41,7 @@ let readProp (propName: string) =
 let stableSerdeFSVersion     = readProp "SerdeFSVersion"
 let stableSourceGenVersion   = readProp "SourceGenVersion"
 let stableSerdeJsonVersion   = readProp "SerdeJsonVersion"
+let stableSerdeFableVersion  = readProp "SerdeFableVersion"
 let stableSerdeStjVersion    = readProp "SerdeStjVersion"
 
 let timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmss")
@@ -70,6 +74,7 @@ pipeline "debug" {
             printfn $"Stable Serde.FS:       {stableSerdeFSVersion}"
             printfn $"Stable SourceGen:      {stableSourceGenVersion}"
             printfn $"Stable Serde.FS.Json:  {stableSerdeJsonVersion}"
+            printfn $"Stable Serde.FS.Fable: {stableSerdeFableVersion}"
             printfn $"Stable Serde.FS.STJ:   {stableSerdeStjVersion}"
             printfn $"Timestamp:             {timestamp}"
             printfn $"Debug version:         {debugVersion}"
@@ -92,7 +97,7 @@ pipeline "debug" {
             printfn "Local feed pruned."
 
             let globalPkgs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages")
-            for pkgName in [ "serde.fs"; "serde.fs.sourcegen"; "serde.fs.json"; "serde.fs.systemtextjson" ] do
+            for pkgName in [ "serde.fs"; "serde.fs.sourcegen"; "serde.fs.json"; "serde.fs.json.fable"; "serde.fs.systemtextjson" ] do
                 let pkgDir = Path.Combine(globalPkgs, pkgName)
                 if Directory.Exists(pkgDir) then
                     for versionDir in Directory.GetDirectories(pkgDir) do
@@ -123,6 +128,7 @@ pipeline "debug" {
     stage "Publish GeneratorHosts" {
         run $"dotnet publish {generatorHostProj} -c Debug"
         run $"dotnet publish {stjGeneratorHostProj} -c Debug"
+        run $"dotnet publish {fableGeneratorHostProj} -c Debug"
     }
 
     stage "Pack Serde.FS.Json" {
@@ -130,6 +136,13 @@ pipeline "debug" {
         run $"dotnet clean {stjProj}"
         run $"dotnet build {stjProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
         run $"dotnet pack {stjProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SourceGenVersion={debugVersion}"
+    }
+
+    stage "Pack Serde.FS.Json.Fable" {
+        run $"dotnet restore {fableProj} --no-cache /p:SerdeFSVersion={debugVersion}"
+        run $"dotnet clean {fableProj}"
+        run $"dotnet build {fableProj} -c Debug /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SerdeFableVersion={debugVersion}"
+        run $"dotnet pack {fableProj} -c Debug -o {nugetLocalDir} /p:PackageVersion={debugVersion} /p:SerdeFSVersion={debugVersion} /p:SerdeFableVersion={debugVersion}"
     }
 
     stage "Pack Serde.FS.SystemTextJson" {
@@ -149,6 +162,7 @@ pipeline "debug" {
             writeVersionProps sampleRpcSharedProj [ "SerdeFSVersion", debugVersion ]
             writeVersionProps sampleRpcServerProj [ "SerdeJsonVersion", debugVersion ]
             writeVersionProps sampleRpcClientProj [ "SerdeJsonVersion", debugVersion ]
+            writeVersionProps sampleRpcFableClientProj [ "SerdeFableVersion", debugVersion ]
             writeVersionProps sampleAppProj [ "SerdeJsonVersion", debugVersion; "SerdeStjVersion", debugVersion ]
         )
     }
@@ -157,6 +171,7 @@ pipeline "debug" {
         run $"dotnet restore {sampleRpcSharedProj} --no-cache"
         run $"dotnet restore {sampleRpcServerProj} --no-cache"
         run $"dotnet restore {sampleRpcClientProj} --no-cache"
+        run $"dotnet restore {sampleRpcFableClientProj} --no-cache"
         run $"dotnet restore {sampleAppProj} --no-cache"
     }
 
@@ -173,6 +188,15 @@ pipeline "debug" {
         run $"dotnet build {sampleRpcClientProj} --no-restore"
     }
 
+    stage "Build SampleRpc.FableClient" {
+        // Verifies the new Serde.FS.Json.Fable consumer flow: installing the
+        // package on a Fable client project triggers generation of
+        // ~<Api>.fable.g.fs into the project's OWN fable-generated/ folder
+        // during its build (no cross-project writes). We use --no-restore
+        // because the prior Restore stage handled it.
+        run $"dotnet build {sampleRpcFableClientProj} --no-restore"
+    }
+
     stage "Summary" {
         run (fun _ ->
             printfn ""
@@ -184,11 +208,13 @@ pipeline "debug" {
             printfn $"    Serde.FS                  {debugVersion}"
             printfn $"    Serde.FS.SourceGen        {debugVersion}"
             printfn $"    Serde.FS.Json             {debugVersion}"
+            printfn $"    Serde.FS.Json.Fable       {debugVersion}"
             printfn $"    Serde.FS.SystemTextJson   {debugVersion}"
             printfn $"  Sample projects:"
             printfn $"    SampleApp                 OK"
             printfn $"    SampleRpc.Server          OK"
             printfn $"    SampleRpc.Client          OK"
+            printfn $"    SampleRpc.FableClient     OK"
             printfn "========================================"
             printfn ""
         )

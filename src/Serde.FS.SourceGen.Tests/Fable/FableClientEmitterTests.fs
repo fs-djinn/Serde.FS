@@ -11,6 +11,7 @@ module Serde.FS.SourceGen.Tests.Fable.FableClientEmitterTests
 open NUnit.Framework
 open Serde.FS
 open Serde.FS.Json.SourceGen
+open Serde.FS.Json.Fable.SourceGen
 open Serde.FS.SourceGen.Tests.Fable
 open Serde.FS.SourceGen.Tests.Fable.SyntheticTypes
 
@@ -136,10 +137,12 @@ type ProjectWithHub = { Hub: Forge.Hub }
     Assert.Pass()
 
 [<Test>]
-let ``unresolved type yields SerdeFS102 and skips file emission`` () =
-    // Build an interface whose output TypeInfo is None — simulating discovery
-    // failing to resolve a type. JsonCodeEmitter.EmitCrossProjectFiles must
-    // produce an MSBuild-format diagnostic and emit no file.
+let ``unresolved type yields SerdeFS102 diagnostic`` () =
+    // Build an interface whose output TypeInfo is None — simulating
+    // discovery failing to resolve a type. FableClientEmitter's pre-check
+    // (used by the Fable.GeneratorHost) must produce an MSBuild-format
+    // diagnostic naming the unresolved method/type and a clickable source
+    // file location.
     let brokenMethod =
         { MethodName = "GetMystery"
           InputType = "int"
@@ -154,16 +157,13 @@ let ``unresolved type yields SerdeFS102 and skips file emission`` () =
         { (interfaceOf "Domain" "IBrokenApi" [ brokenMethod ] true) with
             SourceFilePath = Some "/tmp/Domain/Api.fs" }
 
-    let emitter = JsonCodeEmitter() :> ISerdeRpcEmitter
-    let result = emitter.EmitCrossProjectFiles([ iface ], [])
-
-    Assert.That(result.Files, Is.Empty, "no file should be emitted when a method's TypeInfo is None")
-    Assert.That(result.Errors.Length, Is.EqualTo(1))
-    let err = result.Errors.[0]
-    Assert.That(err, Does.Contain("error SerdeFS102"))
-    Assert.That(err, Does.Contain("'Domain.IBrokenApi'"))
-    Assert.That(err, Does.Contain("GetMystery output"))
-    Assert.That(err, Does.StartWith("/tmp/Domain/Api.fs(1,1):"))
+    match FableClientEmitter.validateInterfaceTypes iface with
+    | None -> Assert.Fail "expected SerdeFS102 diagnostic for unresolved output type"
+    | Some err ->
+        Assert.That(err, Does.Contain("error SerdeFS102"))
+        Assert.That(err, Does.Contain("'Domain.IBrokenApi'"))
+        Assert.That(err, Does.Contain("GetMystery output"))
+        Assert.That(err, Does.StartWith("/tmp/Domain/Api.fs(1,1):"))
 
 [<Test>]
 let ``multi-case union with mixed cases`` () =

@@ -14,6 +14,12 @@
         <PackageReference Include="Fable.Core" Version="5.0.0" />
         <PackageReference Include="Fable.Lit" Version="1.4.2" />
         <PackageReference Include="Fable.Lit.Dsl" Version="1.0.1" />
+        <!-- Installing this package on a Fable client project turns ON
+             Fable client generation: every build scans directly-referenced
+             projects for [<RpcApi>] interfaces and writes a typed proxy
+             into this project's own fable-generated/ folder. No attribute
+             needed on the interface — the package's presence IS the opt-in. -->
+        <PackageReference Include="Serde.FS.Json.Fable" Version="$(SerdeFableVersion)" />
     </ItemGroup>
 
     <ItemGroup>

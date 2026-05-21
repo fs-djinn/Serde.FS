@@ -1,14 +1,16 @@
-namespace Serde.FS.Json.SourceGen
+namespace Serde.FS.Json.Fable.SourceGen
 
 open System.Text
-open System.IO
 open Serde.FS
 open FSharp.SourceDjinn.TypeModel
 
-/// Emits a self-contained Fable-compatible F# client for an [<RpcApi>] interface
-/// that has been annotated with [<GenerateFableClient>]. The emitted file is
-/// guarded with #if FABLE_COMPILER so it is inert under .NET compilation.
-module internal FableClientEmitter =
+/// Emits a self-contained Fable-compatible F# client for an [<RpcApi>] interface.
+/// The emitted file is guarded by `open Fable.Core` constructs that compile as
+/// dead code under .NET but produce the real browser-side client under Fable.
+/// The consumer Fable project installs the `Serde.FS.Json.Fable` NuGet package
+/// to opt into generation; the package's buildTransitive target invokes the
+/// GeneratorHost which uses this module to produce the output file.
+module FableClientEmitter =
 
     /// Minimal type expression tree used by the Fable emitter.
     type FableTypeExpr =
@@ -596,29 +598,49 @@ module internal FableClientEmitter =
 
         out.ToString()
 
-    /// Compute the absolute path where the Fable file should be written.
-    /// The default location is
-    ///   "<SharedProjectDir>/fable-generated/~<ApiName>.fable.g.fs"
-    /// Naming convention:
+    /// Validate that every method on an [<RpcApi>] interface has a resolved
+    /// TypeInfo for its inputs, per-parameter inputs (if tupled), and output.
+    /// If any are missing, return an MSBuild-format diagnostic string —
+    /// "SerdeFS102" — that the GeneratorHost forwards to stderr so the IDE
+    /// surfaces it as a clickable compile error. Returns None when the
+    /// interface is fully resolved.
+    ///
+    /// Exposed publicly so tooling outside the GeneratorHost (notably the
+    /// snapshot test project) can exercise the diagnostic without going
+    /// through file I/O.
+    let validateInterfaceTypes (rpc: RpcInterfaceInfo) : string option =
+        let unresolved =
+            [ for m in rpc.Methods do
+                if m.InputType <> "unit" && not m.InputIsTupled && m.InputTypeInfo.IsNone then
+                    yield sprintf "%s input '%s'" m.MethodName m.InputType
+                if m.InputIsTupled then
+                    for i in 0 .. m.InputParams.Length - 1 do
+                        let tiOpt =
+                            if i < m.InputParamTypeInfos.Length
+                            then m.InputParamTypeInfos.[i]
+                            else None
+                        if tiOpt.IsNone then
+                            yield sprintf "%s param[%d] '%s'" m.MethodName i m.InputParams.[i]
+                if m.OutputTypeInfo.IsNone then
+                    yield sprintf "%s output '%s'" m.MethodName m.OutputType ]
+        if List.isEmpty unresolved then None
+        else
+            let srcPath = rpc.SourceFilePath |> Option.defaultValue "<unknown>"
+            Some (
+                sprintf
+                    "%s(1,1): error SerdeFS102: Fable client for '%s' cannot resolve type(s) for %s. Ensure each referenced type is declared in a project source file walked by Serde."
+                    srcPath rpc.FullName (String.concat "; " unresolved))
+
+    /// Filename convention for the Fable client output file.
     ///   • `~` prefix sorts the file at the top in IDE explorers alongside
     ///     other generated artifacts (mirrors `~SerdeJsonCodecs.json.g.fs`,
     ///     `~Rpc.IServerApi.json.g.fs` on the server side).
     ///   • `.fable.g.fs` suffix is self-documenting on Goto-Definition —
-    ///     the IDE title bar makes it obvious the file is generated, even
-    ///     when the consumer is unfamiliar with the directory layout.
-    /// We deliberately avoid obj/ because Fable's project cracker filters out
-    /// any file whose path contains /obj/ — see Fable's removeFilesInObjFolder.
-    let resolveOutputPath (iface: RpcInterfaceInfo) : string option =
-        match iface.SourceFilePath with
-        | None -> None
-        | Some sourceFile ->
-            let sourceDir = Path.GetDirectoryName(Path.GetFullPath sourceFile)
-            let outDir =
-                match iface.FableOutputDir with
-                | Some custom when not (System.String.IsNullOrWhiteSpace custom) ->
-                    if Path.IsPathRooted custom then custom
-                    else Path.GetFullPath(Path.Combine(sourceDir, custom))
-                | _ ->
-                    Path.Combine(sourceDir, "fable-generated")
-            let fileName = sprintf "~%s.fable.g.fs" iface.ShortName
-            Some (Path.Combine(outDir, fileName))
+    ///     the IDE title bar makes it obvious the file is generated.
+    /// The output DIRECTORY is the consumer Fable project's own
+    /// `fable-generated/` folder, supplied by the GeneratorHost based on
+    /// the MSBuild project directory — not the interface's source file dir.
+    /// (Fable's project cracker excludes anything under `obj/`, so we
+    /// deliberately keep the folder in the source tree.)
+    let outputFileName (iface: RpcInterfaceInfo) : string =
+        sprintf "~%s.fable.g.fs" iface.ShortName

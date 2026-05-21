@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);NU5128</NoWarn>
+
+		<!-- Packable design-time-only library: install on a Fable client project
+		     to generate Fable RPC client modules from [<RpcApi>] interfaces in
+		     referenced (Shared) projects. The build target invokes the
+		     GeneratorHost tool bundled at tools/net9.0/. -->
+		<IsPackable>true</IsPackable>
+		<PackageId>Serde.FS.Json.Fable</PackageId>
+		<Version>$(SerdeFableVersion)</Version>
+		<Authors>Jordan Marr</Authors>
+		<Description>
+			Fable client generator for Serde.FS.Json RPC. Install on a Fable client project to auto-generate a typed client proxy (and matching JSON codecs) from `[&lt;RpcApi&gt;]` interfaces in any directly-referenced project. The generated file lives in the consumer's `fable-generated/` folder and is auto-included in compilation; no manual wiring required.
+		</Description>
+		<PackageTags>fsharp;serde;fable;rpc;json;client</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+		<!-- The package's runtime payload is just the buildTransitive target +
+		     the GeneratorHost tool. No managed library output is consumed by
+		     the user's code; ignore the "missing lib for net8.0" pack warning. -->
+		<IncludeBuildOutput>false</IncludeBuildOutput>
+
+		<!-- Local fallback version. The debug pipeline supplies the real
+		     version via /p:SerdeFableVersion. -->
+		<SerdeFableVersion>1.0.0-alpha.1</SerdeFableVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- The runtime `[<RpcApi>]` attribute the consumer's source uses.
+		     This flows transitively to the Fable client project. -->
+		<ProjectReference Include="..\Serde.FS\Serde.FS.fsproj" />
+
+		<!-- Design-time only — never flows to consumers. The GeneratorHost
+		     publish output (bundled below) carries the SourceGen DLL inside
+		     the package's tools/net9.0/ folder. We deliberately do NOT
+		     ProjectReference the net9.0 GeneratorHost from this net8.0
+		     project: it would fail the TFM compatibility check. The debug
+		     pipeline publishes the GeneratorHost separately before packing,
+		     so the `<Content>` glob below has files to pick up. -->
+		<ProjectReference Include="..\Serde.FS.Json.Fable.SourceGen\Serde.FS.Json.Fable.SourceGen.fsproj" PrivateAssets="all" />
+	</ItemGroup>
+
+	<!-- Console host: publish output goes to tools/net9.0/ inside the package. -->
+	<ItemGroup>
+		<Content Include="..\Serde.FS.Json.Fable.GeneratorHost\bin\$(Configuration)\net9.0\publish\**\*"
+				 PackagePath="tools/net9.0/"
+				 CopyToOutputDirectory="Never"
+				 Visible="false" />
+	</ItemGroup>
+
+	<!-- buildTransitive target that fires in the consumer Fable project's
+	     build, running the GeneratorHost and injecting the generated file
+	     as a Compile item. -->
+	<ItemGroup>
+		<None Include="buildTransitive\Serde.FS.Json.Fable.targets" Pack="true" PackagePath="buildTransitive" Link="buildTransitive\Serde.FS.Json.Fable.targets" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- See Serde.FS.fsproj for the rationale on the lowered FSharp.Core floor. -->
+		<PackageReference Update="FSharp.Core" Version="8.0.100" />
+	</ItemGroup>
+
+</Project>

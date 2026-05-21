@@ -65,21 +65,6 @@ type RpcApiAttribute() =
     /// Controls how method names are transformed into URL segments.
     member val UrlCase : UrlCase = UrlCase.Default with get, set
 
-/// Applied alongside [<RpcApi>] on an interface to request generation of a
-/// Fable-compatible client proxy + JSON codecs. The generator writes the file
-/// to the project containing the interface under
-/// fable-generated/~{InterfaceName}.fable.g.fs by default. The emitted code
-/// uses Fable.Core types, which compile under both .NET and Fable: Fable
-/// produces the real browser-side client, while .NET treats the module as
-/// dead code that would throw at runtime if invoked.
-[<AttributeUsage(AttributeTargets.Interface, AllowMultiple = false)>]
-type GenerateFableClientAttribute() =
-    inherit Attribute()
-    /// Optional override for the output directory. Relative paths are resolved
-    /// against the directory containing the annotated interface's source file.
-    /// When null, defaults to "fable-generated" under that project.
-    member val OutputDir : string = null with get, set
-
 /// Defines a discoverable bootstrap that will be automatically run during the entry point startup sequence.
 type IEntryPointBootstrap =
     abstract member Init : unit -> unit

@@ -58,16 +58,22 @@ Most users will install:
 
 ## 🌐 Fable RPC Client
 
-Annotate an `[<RpcApi>]` interface with `[<GenerateFableClient>]` and Serde will emit a ready-to-consume Fable client alongside the server codecs — same compile-time, reflection-free pipeline:
+Install `Serde.FS.Json.Fable` on your Fable client project. Its presence is the opt-in: every build scans the directly-referenced projects (typically your Shared project) for `[<RpcApi>]` interfaces and emits a ready-to-consume Fable client into the Fable project's own `fable-generated/` folder — same compile-time, reflection-free pipeline as the server-side codecs:
 
 ```fsharp
+// Shared/Domain.fs — the interface lives in the shared project as usual.
 [<RpcApi>]
-[<GenerateFableClient>]
 type IOrderApi =
     abstract GetProduct : ProductId -> Async<Product>
 ```
 
-The Server build writes `<Shared>/fable-generated/<ApiName>.fs` into the project that hosts the interface. `Serde.FS`'s MSBuild target auto-includes the file as a `Compile` item, so there is no manual `.fsproj` wiring. The Fable project consumes it like any interface:
+```xml
+<!-- WebFable/WebFable.fsproj — install the package on the FABLE side. -->
+<PackageReference Include="Serde.FS.Json.Fable" Version="1.0.0-..." />
+<PackageReference Include="Fable.Core" Version="5.0.0" />
+```
+
+After the next build of the Fable project, the generated client is at `WebFable/fable-generated/~IOrderApi.fable.g.fs` (auto-included as a `Compile` item — no manual `.fsproj` editing). Consume it like any interface:
 
 ```fsharp
 open SampleRpc.Shared
@@ -76,23 +82,7 @@ let client = IOrderApiFableClient.create "/"
 let! product = client.GetProduct(ProductId 42)
 ```
 
-The Shared project only needs one extra package:
-
-```xml
-<PackageReference Include="Fable.Core" Version="5.0.0" />
-```
-
-**Fable 5+ — zero wiring.** Fable 5's rewritten project cracker reads the F# SDK's resolved compile arguments, so the `Compile` items injected by Serde's MSBuild target are picked up automatically. Nothing else to do.
-
-**Fable 4 — one manual `.fsproj` edit.** Fable 4's older cracker parsed the `.fsproj` directly and ignored MSBuild-injected items, so you have to add the include yourself in your Shared project:
-
-```xml
-<ItemGroup>
-  <Compile Include="fable-generated\*.fs" />
-</ItemGroup>
-```
-
-Upgrading to Fable 5 is recommended — once you do, you can delete the snippet above.
+The folder is auto-`.gitignore`d (the generator drops a self-ignoring marker file), so generated artifacts never show up in `git status`.
 
 A full working end-to-end example (ASP.NET server + Lit-based Fable web client) lives under [src/Serde.FS.Json.SampleRpc.FableClient](src/Serde.FS.Json.SampleRpc.FableClient).
 

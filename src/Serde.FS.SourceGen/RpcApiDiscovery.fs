@@ -8,7 +8,11 @@ open Serde.FS
 
 /// Discovers types transitively referenced from [<RpcApi>] interfaces.
 /// Uses FSharpChecker directly because SourceDjinn does not parse interfaces.
-module internal RpcApiDiscovery =
+/// Discovers `[<RpcApi>]` interfaces and their transitively-referenced types
+/// from F# source files. Used by both the server-side codec generator
+/// (`Serde.FS.Json.GeneratorHost`) and the Fable client generator
+/// (`Serde.FS.Json.Fable.GeneratorHost`).
+module RpcApiDiscovery =
 
     let private checker = FSharpChecker.Create()
 
@@ -16,7 +20,6 @@ module internal RpcApiDiscovery =
         idents |> List.map (fun i -> i.idText) |> String.concat "."
 
     let private rpcApiAttrNames = set [ "RpcApi"; "RpcApiAttribute" ]
-    let private generateFableClientAttrNames = set [ "GenerateFableClient"; "GenerateFableClientAttribute" ]
 
     /// Names of types to skip during closure computation (primitives, wrappers, collections).
     let private skipTypeNames =
@@ -451,11 +454,6 @@ module internal RpcApiDiscovery =
         UrlCaseValue: int
     }
 
-    /// Parsed [<GenerateFableClient>] attribute properties.
-    type private FableClientAttrProps = {
-        OutputDir: string option
-    }
-
     /// Try to extract a string constant from a SynExpr.
     let private tryGetStringConst (expr: SynExpr) =
         match expr with
@@ -534,40 +532,6 @@ module internal RpcApiDiscovery =
             parseArgs attr.ArgExpr
             Some { Root = root; Version = version; UrlCaseValue = urlCaseValue }
 
-    /// Try to find and parse the [<GenerateFableClient>] attribute from a SynComponentInfo.
-    /// Returns None if the attribute is not present.
-    let private tryGetFableClientAttr (synComponentInfo: SynComponentInfo) : FableClientAttrProps option =
-        let (SynComponentInfo(attributes = attrs)) = synComponentInfo
-        let fableAttr =
-            attrs
-            |> List.tryPick (fun attrList ->
-                attrList.Attributes
-                |> List.tryFind (fun attr ->
-                    match attr.TypeName with
-                    | SynLongIdent(id = idents) ->
-                        let name = identToString idents
-                        generateFableClientAttrNames.Contains name))
-        match fableAttr with
-        | None -> None
-        | Some attr ->
-            let mutable outputDir = None
-
-            let parseArgs (argExpr: SynExpr) =
-                let processArg expr =
-                    match tryExtractNamedArg expr with
-                    | Some ("OutputDir", valExpr) -> outputDir <- tryGetStringConst valExpr
-                    | _ -> ()
-
-                match argExpr with
-                | SynExpr.Const(SynConst.Unit, _) -> ()
-                | SynExpr.Paren(SynExpr.Const(SynConst.Unit, _), _, _, _) -> ()
-                | SynExpr.Paren(SynExpr.Tuple(_, exprs, _, _), _, _, _) ->
-                    for expr in exprs do processArg expr
-                | SynExpr.Paren(inner, _, _, _) -> processArg inner
-                | other -> processArg other
-
-            parseArgs attr.ArgExpr
-            Some { OutputDir = outputDir }
 
     /// Get the fully qualified name from a SynComponentInfo in the context of a namespace/modules.
     let private getTypeName (ns: string option) (modules: string list) (synComponentInfo: SynComponentInfo) : string * string =
@@ -696,7 +660,6 @@ module internal RpcApiDiscovery =
                         processAbstractSlot methods slotSig
                     | _ -> ()
 
-                let fableProps = tryGetFableClientAttr synComponentInfo
                 collected.Interfaces.Add({
                     FullName = fullName
                     ShortName = shortName
@@ -704,8 +667,6 @@ module internal RpcApiDiscovery =
                     Root = attrProps.Root
                     Version = attrProps.Version
                     UrlCaseValue = attrProps.UrlCaseValue
-                    GenerateFableClient = fableProps.IsSome
-                    FableOutputDir = fableProps |> Option.bind (fun p -> p.OutputDir)
                     SourceFilePath = Some filePath
                     IsParentNamespace = isParentNamespace
                 })

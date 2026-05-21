@@ -1,49 +1,13 @@
 <Project>
   <Target Name="SerdeSourceGenClean" AfterTargets="Clean">
     <!-- Remove this project's own Serde-generated artefacts on Clean:
-         obj/serde-generated/ — codecs / dispatch / entry-point.
-         Do NOT remove fable-generated/ here: this targets file is imported by
-         every project that references Serde.FS (including Shared/Domain
-         projects), but the fable-generated/ folder is OWNED by the backend
-         project's generator (Serde.FS.Json). If we cleaned it here, a
-         WebFable Rebuild that transitively cleans Shared would wipe the file
-         before WebFable's compile sees it, breaking the Fable client. The
-         owner-driven cleanup lives in Serde.FS.Json.targets's
-         SerdeJsonCleanFableClients target. -->
+         obj/serde-generated/ — codecs, dispatch modules, entry-point shim.
+         The Fable client folder (when present) is owned by the
+         Serde.FS.Json.Fable package's targets, NOT this base targets file —
+         this targets file is imported by every project that references
+         Serde.FS (including Shared/Domain projects), and we must not touch
+         fable-generated/ from those because the Fable consumer's package
+         owns that folder. -->
     <RemoveDir Directories="$(IntermediateOutputPath)serde-generated" />
   </Target>
-
-  <!-- Auto-include generated Fable client files written by a sibling project's
-       generator when the interface is annotated with [<GenerateFableClient>].
-       This MUST be an evaluation-time ItemGroup (not a target):
-         • Fable 5's project cracker invokes `FscCommandLineArgs` (not
-           `CoreCompile`), so any `BeforeTargets="CoreCompile"` target would
-           never fire under Fable and the generated file would be invisible
-           to the Fable build.
-         • The IDE's F# language service runs design-time builds that also
-           skip `CoreCompile`, so the same problem appears there as red
-           squiggles even when `dotnet build` succeeds.
-       An evaluation-time ItemGroup is target-invariant: the items are part
-       of the project's static item list, picked up by ANY MSBuild consumer
-       (dotnet build, Fable cracker, IDE design-time build) regardless of
-       which targets they invoke.
-
-       Cold-start note: this requires the file to exist at MSBuild evaluation
-       time. The file is written by a sibling backend project's generator
-       during its own build, so for a green-field workspace the user must
-       build the backend (e.g. the ASP.NET server) once before Fable can see
-       the client — subsequent builds work transparently. The Items appear
-       at the END of the Compile list (this .targets file is imported after
-       the consuming .fsproj is evaluated), which is the right order because
-       the generated client references types defined elsewhere in Domain. -->
-  <ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\fable-generated')">
-    <!-- Visible="false" hides these from Solution Explorer (and other IDE
-         explorers that honor MSBuild item metadata) so the auto-generated
-         Fable client doesn't clutter the consumer's project node — the user
-         never wrote these files and shouldn't have to look at them. They
-         remain active Compile items so the F# compiler / Fable's cracker
-         still pick them up. -->
-    <Compile Include="$(MSBuildProjectDirectory)\fable-generated\*.fs"
-             Visible="false" />
-  </ItemGroup>
 </Project>
