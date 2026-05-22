@@ -5,8 +5,8 @@
 [![Serde.FS.Json.AspNet](https://img.shields.io/nuget/vpre/Serde.FS.Json.AspNet.svg?label=Serde.FS.Json.AspNet)](https://www.nuget.org/packages/Serde.FS.Json.AspNet/)
 [![Serde.FS.Json.Fable](https://img.shields.io/nuget/vpre/Serde.FS.Json.Fable.svg?label=Serde.FS.Json.Fable)](https://www.nuget.org/packages/Serde.FS.Json.Fable/)
 
-Serde.FS is a reflection‑free, compile‑time validated serialization and RPC framework for F#.  
-It brings Rust‑style determinism to .NET and adds a **zero‑boilerplate RPC layer** on top — server, .NET client, and (with Fable 5+) browser‑side Fable client are all generated from a single `[<RpcApi>]` interface.
+Serde.FS is a reflection‑free, compile‑time validated serialization and RPC framework for F#.
+It brings Rust‑style determinism to .NET and adds a **zero‑boilerplate RPC layer** on top — your ASP.NET server, .NET client, and Fable browser client are all generated from a single `[<RpcApi>]` interface.
 
 ---
 
@@ -20,85 +20,69 @@ type IOrderApi =
     abstract PlaceOrder : Order -> Async<OrderSummary>
 ```
 
-### Server.fsproj
+### Server.fsproj (ASP.NET)
 ```fsharp
 app.MapRpcApi<IOrderApi>(OrderApi())
 ```
 
-### Client.fsproj
+### Client — pick your stack
+
+**.NET client (HttpClient):**
 ```fsharp
 use http = new HttpClient()
 let api = RpcClient.create<IOrderApi> http "http://localhost:5050"
 let! product = api.GetProduct(ProductId 42)
 ```
 
-That’s the entire workflow:  
-**Define an interface → Implement it → Call it.**  
+**Fable client (browser):**
+```fsharp
+open SerdeGenerated.Fable
 
-All routing, serialization, and client code is fully generated at compile time by the same deterministic engine that powers Serde.FS — no reflection, no runtime inference, no surprises.
+let api = IOrderApiFableClient.create "/"
+let! product = api.GetProduct(ProductId 42)
+```
+
+That’s the entire workflow:
+**Define an interface → Implement it → Call it from any F# runtime.**
+
+Routing, serialization, and client code are all generated at compile time by the same deterministic engine that powers Serde.FS — no reflection, no runtime inference, no DTO drift.
 
 ---
 
-## 📦 NuGet Packages
+## 📦 Package Map
 
-Serde.FS is composed of several focused packages:
+Pair one column of packages with your three‑project F# solution:
 
-| Package | Description |
-|--------|-------------|
-| **Serde.FS** | Core metadata + attributes used by all backends |
-| **Serde.FS.Json** | Deterministic, reflection‑free JSON backend |
-| **Serde.FS.Json.AspNet** | Integrates Serde.FS.Json into ASP.NET for RPC servers; also emits Fable clients when interfaces are annotated with `[<GenerateFableClient>]` |
+| Project | .NET‑client stack       | Fable‑client stack       |
+|---------|-------------------------|--------------------------|
+| **Shared** (interface + DTOs) | `Serde.FS` | `Serde.FS` |
+| **Server** (ASP.NET) | `Serde.FS.Json.AspNet` | `Serde.FS.Json.AspNet` |
+| **Client** | `Serde.FS.Json` | `Serde.FS.Json.Fable` |
 
-Most users will install:
+What each package brings:
 
-- `Serde.FS.Json.AspNet` (for RPC servers)
-- `Serde.FS.Json` (for serialization)
-
----
-
-## 🌐 Fable RPC Client
-
-Install `Serde.FS.Json.Fable` on your Fable client project. Its presence is the opt-in: every build scans the directly-referenced projects (typically your Shared project) for `[<RpcApi>]` interfaces and emits a ready-to-consume Fable client into the Fable project's own `fable-generated/` folder — same compile-time, reflection-free pipeline as the server-side codecs:
-
-```fsharp
-// Shared/Domain.fs — the interface lives in the shared project as usual.
-[<RpcApi>]
-type IOrderApi =
-    abstract GetProduct : ProductId -> Async<Product>
-```
-
-```xml
-<!-- WebFable/WebFable.fsproj — install the package on the FABLE side. -->
-<PackageReference Include="Serde.FS.Json.Fable" Version="1.0.0-..." />
-<PackageReference Include="Fable.Core" Version="5.0.0" />
-```
-
-After the next build of the Fable project, the generated client is at `WebFable/fable-generated/~IOrderApi.fable.g.fs` (auto-included as a `Compile` item — no manual `.fsproj` editing). Consume it like any interface:
-
-```fsharp
-open SampleRpc.Shared
-
-let client = IOrderApiFableClient.create "/"
-let! product = client.GetProduct(ProductId 42)
-```
-
-The folder is auto-`.gitignore`d (the generator drops a self-ignoring marker file), so generated artifacts never show up in `git status`.
-
-A full working end-to-end example (ASP.NET server + Lit-based Fable web client) lives under [src/Serde.FS.Json.SampleRpc.FableClient](src/Serde.FS.Json.SampleRpc.FableClient).
+| Package | What it adds |
+|---------|--------------|
+| **Serde.FS** | Core attributes (`[<Serde>]`, `[<RpcApi>]`) and runtime metadata. Install on any project that declares serializable types or RPC interfaces. |
+| **Serde.FS.Json** | Deterministic, reflection‑free JSON backend. Use it standalone for `SerdeJson.serialize`/`deserialize`, or on a .NET client project to get `RpcClient.create<T>`. |
+| **Serde.FS.Json.AspNet** | Adds `app.MapRpcApi<T>(impl)` for ASP.NET endpoints. Transitively brings `Serde.FS.Json`, so installing this on the server is enough. |
+| **Serde.FS.Json.Fable** | Installing this on a Fable project turns ON Fable client generation: every build scans directly‑referenced projects for `[<RpcApi>]` interfaces and writes a typed proxy into `fable-generated/` (auto‑included in compilation). |
 
 ---
 
 ## 🚀 Getting Started
 
-This is the smallest possible Serde.FS RPC setup.  
-It uses three projects — following the classic SAFE Stack structure.
+The smallest possible Serde.FS RPC setup follows the classic SAFE‑style layout:
 
 ```
-SampleRpc/  
-  Shared/  
-  Server/  
-  Client/
+SampleRpc/
+  Shared/
+  Server/
+  Client/        ← .NET client
+  WebFable/      ← (optional) Fable browser client
 ```
+
+You can use *either* `Client/` or `WebFable/` — or both, against the same `Shared` interface. They’re fully independent.
 
 ---
 
@@ -116,7 +100,7 @@ namespace Shared
 
 open Serde.FS
 
-// DTOs — no [<Serde>] needed, discovered via [<RpcApi>] interface
+// DTOs — no [<Serde>] needed, discovered via [<RpcApi>] interface.
 
 [<Struct>]
 type ProductId = ProductId of int
@@ -130,11 +114,9 @@ type IOrderApi =
     abstract GetProduct : ProductId -> Async<Product>
 ```
 
-This is the only place where the interface lives.  
-Both the server and client reference this project.
+The interface lives in this project. The server, the .NET client, and the Fable client all reference it.
 
-See the full shared example here:
-[SampleRpc.Shared/Domain.fs](src/Serde.FS.Json.SampleRpc.Shared/Domain.fs)
+See: [SampleRpc.Shared/Domain.fs](src/Serde.FS.Json.SampleRpc.Shared/Domain.fs)
 
 ---
 
@@ -168,17 +150,15 @@ let main argv =
     0
 ```
 
-That’s it — no authentication, no policies, no extra endpoints.  
-Just a clean RPC server.
+No auth, no policies, no extra endpoints — just a clean RPC server.
 
-See the full server example here:
-[SampleRpc.Server/Program.fs](src/Serde.FS.Json.SampleRpc.Server/Program.fs)
+See: [SampleRpc.Server/Program.fs](src/Serde.FS.Json.SampleRpc.Server/Program.fs)
 
 ---
 
-### 💻 3. Create the Client project
+### 💻 3a. Create the .NET client (optional)
 
-Consume the RPC API with a generated client:
+For a console app, desktop client, or any .NET service that needs to call the API:
 
 ```bash
 dotnet new console -lang F# -n Client
@@ -203,24 +183,53 @@ let main _ =
     0
 ```
 
-The client is fully generated at compile time —  
-no reflection, no runtime inference, no DTO drift.
+The client proxy is generated at compile time — no reflection, no runtime inference, no DTO drift.
 
-See the full client example here:
-[SampleRpc.Client/Program.fs](src/Serde.FS.Json.SampleRpc.Client/Program.fs)
+See: [SampleRpc.Client/Program.fs](src/Serde.FS.Json.SampleRpc.Client/Program.fs)
 
+---
+
+### 🌐 3b. Create the Fable client (optional)
+
+For a browser app (Lit, Feliz, Elmish, etc.). Install `Serde.FS.Json.Fable` on the Fable project — its presence is the opt‑in. No attribute needed on the interface; every build scans directly‑referenced projects for `[<RpcApi>]` interfaces.
+
+```xml
+<!-- WebFable/WebFable.fsproj -->
+<PackageReference Include="Serde.FS.Json.Fable" Version="1.0.0-..." />
+<PackageReference Include="Fable.Core" Version="5.0.0" />
+```
+
+After the next build, the generated client appears at `WebFable/fable-generated/~IOrderApi.fable.g.fs` (auto‑included as a `Compile` item — no manual `.fsproj` editing). Consume it like any normal interface:
+
+```fsharp
+open Shared
+open SerdeGenerated.Fable
+
+let api = IOrderApiFableClient.create "/"
+
+async {
+    let! product = api.GetProduct(ProductId 42)
+    printfn $"Product: %A{product}"
+}
+```
+
+The `fable-generated/` folder is auto‑`.gitignore`d (the generator drops a self‑ignoring marker file), so generated artifacts never show up in `git status`.
+
+See: a full end‑to‑end example (ASP.NET server + Lit‑based Fable web client) lives under [src/Serde.FS.Json.SampleRpc.FableClient](src/Serde.FS.Json.SampleRpc.FableClient).
 
 ---
 
 ### 🎉 That’s the entire workflow
 
-**Define an interface → Implement it → Call it.**
+**Define an interface → Implement it → Call it from .NET, the browser, or both.**
 
-All routing, serialization, and client code is generated at compile time by the same deterministic engine that powers Serde.FS.
+All routing, serialization, and client code is generated at compile time by the same deterministic engine.
 
 ---
 
-### Customizing RPC Routing
+## ⚙️ Customizing RPC Routing
+
+Override the URL root and case style on the interface:
 
 ```fsharp
 [<RpcApi(Root = "orders", UrlCase = UrlCase.Kebab)>]
@@ -228,22 +237,11 @@ type IOrderApi =
     abstract GetProduct : ProductId -> Async<Product>
 ```
 
-### Generating a Fable client
-
-Stack the `[<GenerateFableClient>]` attribute alongside `[<RpcApi>]` to have the Server build emit a Fable-compatible RPC proxy into the Shared project. See [🌐 Fable RPC Client](#-fable-rpc-client-fable-5) above.
-
-```fsharp
-[<RpcApi>]
-[<GenerateFableClient>]
-type IOrderApi =
-    abstract GetProduct : ProductId -> Async<Product>
-```
-
-By default the file is written to `<SharedDir>/fable-generated/<ApiName>.fs`. Override with `[<GenerateFableClient(OutputDir = "../Web/fable-generated")>]` to target a sibling project instead.
-
 ---
 
-## 🚀 Serialization (Standalone Use)
+## 🧰 Serialization (Standalone Use)
+
+If you’re not building RPC and just want a fast, deterministic JSON serializer for F# types:
 
 ### 1. Install the JSON backend
 
@@ -276,23 +274,26 @@ That’s the entire workflow: **opt in → generate → serialize**.
 
 ### 4. Add EntryPoint
 
-If you are using Serde.FS in an app that needs an entry point, you must use the special `Serde.FS.EntryPoint` attribute:
+If you’re using Serde.FS in an app that needs an entry point, use the special `Serde.FS.EntryPoint` attribute:
 
 ```fsharp
 [<Serde.FS.EntryPoint>]
 let main argv = ...
 ```
 
+See [🏁 Custom EntryPoint for CLI apps](#-custom-entrypoint-for-cli-apps) below for the full explanation.
+
 ---
 
 ## ✨ Key Features
 
-- **Strict, Serde‑style serialization** — Only `[<Serde>]` types participate.  
-- **Compile‑time validation** — Nested types must also be annotated.  
-- **Deterministic code generation** — Stable, predictable serializers.  
-- **Fast runtime backend** — F# Source Generated code, no reflection.  
-- **Custom converters** — Override behavior per‑type without weakening strictness.  
-- **Backend‑agnostic design** — JSON today, TOML/YAML tomorrow.
+- **Strict, Serde‑style serialization** — Only `[<Serde>]` types participate.
+- **Compile‑time validation** — Nested types must also be annotated.
+- **Deterministic code generation** — Stable, predictable serializers.
+- **Fast runtime backend** — F# source‑generated code, no reflection.
+- **Custom converters** — Override behavior per‑type without weakening strictness.
+- **Backend‑agnostic core** — JSON today, TOML/YAML tomorrow.
+- **End‑to‑end RPC** — One `[<RpcApi>]` interface generates server routes, a .NET client, and a Fable browser client.
 
 ---
 
@@ -332,13 +333,12 @@ type FancyNameCodec() =
             match json with
             | JsonValue.String s -> { Value = s.ToLowerInvariant() }
             | _ -> failwith "Expected JSON string for FancyName"
-
 ```
 
 ### 2. Attach it to a type
 
 ```fsharp
-and 
+and
     [<Serde(Codec = typeof<FancyNameCodec>)>]
     FancyName = { Value : string }
 ```
@@ -358,26 +358,26 @@ Converters are explicit, compile‑time validated, and do not introduce fallback
 
 ---
 
-## 🏁 Custom EntryPoint for CLI apps  
-F# requires the real `[<EntryPoint>]` function to appear last in compilation order.  
-Because Serde.FS uses source generation, it cannot safely generate the real entry point directly.  
- 
-To solve this, mark your intended entry point with:  
- 
+## 🏁 Custom EntryPoint for CLI apps
+F# requires the real `[<EntryPoint>]` function to appear last in compilation order.
+Because Serde.FS uses source generation, it cannot safely generate the real entry point directly.
+
+To solve this, mark your intended entry point with:
+
 ```fsharp
 [<Serde.FS.EntryPoint>]
 let main argv = ...
-```  
- 
+```
+
 Serde.FS will generate the actual `[<EntryPoint>]` wrapper in a separate file so it appears in the correct place in the compilation order.
 
 ---
 
 ## 🧱 Design Philosophy
 
-- **Explicitness** — Only annotated types participate.  
-- **Determinism** — No runtime inference or fallback.  
-- **Compile‑time validation** — Errors surface early.  
+- **Explicitness** — Only annotated types participate.
+- **Determinism** — No runtime inference or fallback.
+- **Compile‑time validation** — Errors surface early.
 - **Backend independence** — Metadata is backend‑agnostic.
 
 ---
@@ -386,12 +386,12 @@ Serde.FS will generate the actual `[<EntryPoint>]` wrapper in a separate file so
 
 Serde.FS is not a general‑purpose .NET serializer. It is a **compile‑time, explicit, deterministic system** inspired by Rust Serde.
 
-- Only annotated types participate.  
-- No runtime inference or fallback.  
-- Errors surface early and predictably.  
-- Backends follow Serde semantics, not their own.  
+- Only annotated types participate.
+- No runtime inference or fallback.
+- Errors surface early and predictably.
+- Backends follow Serde semantics, not their own.
 
-Ideal for stable domain models, configuration files, deterministic logs, and interop formats.
+Ideal for stable domain models, configuration files, deterministic logs, RPC contracts, and interop formats.
 
 Not designed for dynamic JSON, schema‑drifting storage, partial deserialization, or runtime‑mutable behavior.
 
@@ -401,10 +401,10 @@ Not designed for dynamic JSON, schema‑drifting storage, partial deserializatio
 
 Serde.FS.Json is a deterministic, reflection‑free JSON backend designed for:
 
-- compile‑time validated serialization  
-- stable, schema‑aware encoding  
-- AOT/WASM‑friendly performance  
-- powering the Serde.FS RPC platform  
+- compile‑time validated serialization
+- stable, schema‑aware encoding
+- AOT/WASM‑friendly performance
+- powering the Serde.FS RPC platform (server, .NET client, Fable client)
 
 If you need highly flexible or dynamic JSON formats, a runtime‑configured library may be a better fit.
 
