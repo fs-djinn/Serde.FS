@@ -28,32 +28,62 @@ open Serde.FS.Json.Fable.SourceGen
 let private projectRefRegex =
     Regex(@"<ProjectReference\s+Include\s*=\s*""([^""]+)""", RegexOptions.IgnoreCase)
 
+/// Matches `<PackageReference Include="Serde.FS..." ...>` AND
+/// `<ProjectReference Include="..\path\to\Serde.FS*.fsproj" ...>`. Either
+/// signals the project participates in Serde's source-gen world and should
+/// be scanned by discovery. A project with NEITHER is a UI lib / external
+/// dependency we don't want to scan (those typically introduce hundreds of
+/// types whose names collide with Domain types — discovery's collision
+/// detection ends up firing on the wrong types and codec emission silently
+/// loses real Domain types).
+let private serdeReferenceRegex =
+    Regex(
+        @"<(?:Project|Package)Reference\s+Include\s*=\s*""[^""]*Serde\.FS[^""]*""",
+        RegexOptions.IgnoreCase)
+
+let private referencesSerdeFS (fsprojPath: string) : bool =
+    try
+        let xml = File.ReadAllText fsprojPath
+        serdeReferenceRegex.IsMatch(xml)
+    with _ -> false
+
 /// Walk the ProjectReference graph recursively starting from `fsprojPath`,
-/// returning the full set of canonical .fsproj paths reachable. Includes
-/// `fsprojPath` itself. Cycles are bounded by the visited set. Logs a
-/// warning for any `<ProjectReference Include="...">` whose target file
-/// can't be found on disk — that's the most common reason a transitive
-/// type doesn't end up in discovery.
-let rec private collectFsprojGraph (visited: Set<string>) (fsprojPath: string) : Set<string> =
-    if not (File.Exists fsprojPath) then
-        eprintfn "[Serde.FS.Json.Fable] WARNING: project file not found, skipping: %s" fsprojPath
-        visited
-    else
-        let canonical = Path.GetFullPath(fsprojPath).ToLowerInvariant()
-        if visited.Contains canonical then visited
+/// returning the full set of canonical .fsproj paths reachable AND whose
+/// projects reference Serde.FS in some form. The starting project is always
+/// included regardless (it's the consumer Fable project — its own sources
+/// may not reference Serde.FS directly but they declare types that get
+/// serialized via discovered RpcApi interfaces in Shared).
+/// Cycles are bounded by the visited set. Logs a warning for any reference
+/// whose target file is missing.
+let private collectFsprojGraph (rootFsproj: string) : Set<string> =
+    let rec walk (isRoot: bool) (visited: Set<string>) (fsprojPath: string) : Set<string> =
+        if not (File.Exists fsprojPath) then
+            eprintfn "[Serde.FS.Json.Fable] WARNING: project file not found, skipping: %s" fsprojPath
+            visited
         else
-            let visited = visited.Add canonical
-            let dir = Path.GetDirectoryName(Path.GetFullPath fsprojPath)
-            try
-                let xml = File.ReadAllText fsprojPath
-                projectRefRegex.Matches(xml)
-                |> Seq.cast<Match>
-                |> Seq.map (fun m -> m.Groups.[1].Value)
-                |> Seq.map (fun rel -> Path.GetFullPath(Path.Combine(dir, rel)))
-                |> Seq.fold collectFsprojGraph visited
-            with ex ->
-                eprintfn "[Serde.FS.Json.Fable] WARNING: failed to parse ProjectReferences from %s: %s" fsprojPath ex.Message
+            let canonical = Path.GetFullPath(fsprojPath).ToLowerInvariant()
+            if visited.Contains canonical then visited
+            // Skip non-Serde dependencies (UI libraries etc.) — they bring
+            // unrelated types into discovery and corrupt collision detection.
+            // The root project is exempt because the user always wants their
+            // own sources scanned.
+            elif not isRoot && not (referencesSerdeFS fsprojPath) then
+                eprintfn "[Serde.FS.Json.Fable] Skipping (no Serde.FS reference): %s" fsprojPath
                 visited
+            else
+                let visited = visited.Add canonical
+                let dir = Path.GetDirectoryName(Path.GetFullPath fsprojPath)
+                try
+                    let xml = File.ReadAllText fsprojPath
+                    projectRefRegex.Matches(xml)
+                    |> Seq.cast<Match>
+                    |> Seq.map (fun m -> m.Groups.[1].Value)
+                    |> Seq.map (fun rel -> Path.GetFullPath(Path.Combine(dir, rel)))
+                    |> Seq.fold (walk false) visited
+                with ex ->
+                    eprintfn "[Serde.FS.Json.Fable] WARNING: failed to parse ProjectReferences from %s: %s" fsprojPath ex.Message
+                    visited
+    walk true Set.empty rootFsproj
 
 /// Collect .fs source files for a project, recursively from its directory.
 /// Excludes build artefacts and generated files so we don't try to discover
@@ -102,7 +132,7 @@ let main (argv: string array) =
         // "local sources" path).
         let allProjects =
             if consumerFsproj = "" then Set.empty
-            else collectFsprojGraph Set.empty consumerFsproj
+            else collectFsprojGraph consumerFsproj
 
         // Diagnostic — log the project graph the walker discovered so users
         // (and we, debugging remote setups) can see whether the transitive
