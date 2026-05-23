@@ -223,7 +223,7 @@ See: a full end‑to‑end example (ASP.NET server + Lit‑based Fable web clien
 >
 > Bundle size is paid once at load. Runtime serialization is paid on every RPC call: Serde.FS decodes through straight‑line generated code (sub‑ms cold), a reflection client walks types at call time. For chatty UIs the per‑call delta dominates the bundle delta after a handful of calls.
 >
-> If bundle size *is* the dominant constraint, lean into modularization: split your `[<RpcApi>]` across multiple Shared projects (e.g. `Shared.Orders`, `Shared.Admin`), and each Fable consumer pulls only the slices it references. The attribute‑driven generation makes this nearly free — the friction that pushes Fable.Remoting toward one giant API doesn't exist here.
+> If bundle size *is* the dominant constraint, lean into modularization: split your `[<RpcApi>]` across multiple Shared projects (e.g. `Shared.Orders`, `Shared.Admin`), and each Fable consumer pulls only the slices it references. The attribute‑driven generation makes this clean to set up — a second interface is one more `[<RpcApi>]` declaration + one more `MapRpcApi<T>` call.
 
 ---
 
