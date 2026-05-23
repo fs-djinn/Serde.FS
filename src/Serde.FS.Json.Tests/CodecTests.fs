@@ -100,6 +100,13 @@ let ``PrimitiveCodecs string encodes correctly`` () =
     Assert.AreEqual(String "abc", PrimitiveCodecs.stringEncoder.Encode "abc")
 
 [<Test>]
+let ``PrimitiveCodecs string encodes null as JSON null`` () =
+    // Regression: a null CLR string (e.g. from a nullable SQL VARCHAR) used to
+    // produce JsonValue.String null, which NRE'd in SerdeJsonWriter.escapeString.
+    // Now matches Newtonsoft / STJ / Fable.Remoting: null encodes as JSON null.
+    Assert.AreEqual(Null, PrimitiveCodecs.stringEncoder.Encode (null: string))
+
+[<Test>]
 let ``PrimitiveCodecs int encodes correctly`` () =
     Assert.AreEqual(Number 42m, PrimitiveCodecs.intEncoder.Encode 42)
 
@@ -173,6 +180,14 @@ let ``PrimitiveCodecs bool round-trips`` () =
 let ``PrimitiveCodecs string round-trips`` () =
     let v = "hello"
     Assert.AreEqual(v, PrimitiveCodecs.stringDecoder.Decode(PrimitiveCodecs.stringEncoder.Encode v))
+
+[<Test>]
+let ``PrimitiveCodecs string round-trips null`` () =
+    // Pair to "encodes null as JSON null": JsonValue.Null must decode back to
+    // a null string reference so encode/decode of a null string is symmetric.
+    let encoded = PrimitiveCodecs.stringEncoder.Encode (null: string)
+    Assert.AreEqual(Null, encoded)
+    Assert.IsNull(PrimitiveCodecs.stringDecoder.Decode encoded)
 
 [<Test>]
 let ``PrimitiveCodecs int round-trips`` () =

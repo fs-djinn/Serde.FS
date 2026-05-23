@@ -27,6 +27,10 @@ module internal SerdeJsonWriter =
         | JsonValue.Null -> sb.Append("null") |> ignore
         | JsonValue.Bool b -> sb.Append(if b then "true" else "false") |> ignore
         | JsonValue.Number n -> sb.Append(n.ToString("G")) |> ignore
+        // Defensive: a hand-built `JsonValue.String null` (e.g. from a custom
+        // codec) should not NRE in escapeString. Treat it as JSON null —
+        // matches the behavior of stringEncoder for null CLR strings.
+        | JsonValue.String null -> sb.Append("null") |> ignore
         | JsonValue.String s -> escapeString sb s
         | JsonValue.Array items ->
             sb.Append('[') |> ignore

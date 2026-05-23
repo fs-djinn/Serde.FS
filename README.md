@@ -217,6 +217,14 @@ The `fable-generated/` folder is auto‑`.gitignore`d (the generator drops a sel
 
 See: a full end‑to‑end example (ASP.NET server + Lit‑based Fable web client) lives under [src/Serde.FS.Json.SampleRpc.FableClient](src/Serde.FS.Json.SampleRpc.FableClient).
 
+> **💡 Trade-off vs Fable.Remoting**
+>
+> The generated Fable client scales with your API surface — a large `[<RpcApi>]` with dozens of methods produces a proportionally larger `~<Api>.fable.g.fs` (and bundled `.js`). A runtime‑reflection client like Fable.Remoting ships a fixed‑size engine instead. For a tiny API, Fable.Remoting wins bundle size; for a larger surface, the gap is smaller than the raw line count suggests — generated code is highly repetitive, which minifiers and gzip crush, and unused method codecs are tree‑shakeable.
+>
+> Bundle size is paid once at load. Runtime serialization is paid on every RPC call: Serde.FS decodes through straight‑line generated code (sub‑ms cold), a reflection client walks types at call time. For chatty UIs the per‑call delta dominates the bundle delta after a handful of calls.
+>
+> If bundle size *is* the dominant constraint, lean into modularization: split your `[<RpcApi>]` across multiple Shared projects (e.g. `Shared.Orders`, `Shared.Admin`), and each Fable consumer pulls only the slices it references. The attribute‑driven generation makes this nearly free — the friction that pushes Fable.Remoting toward one giant API doesn't exist here.
+
 ---
 
 ### 🎉 That’s the entire workflow

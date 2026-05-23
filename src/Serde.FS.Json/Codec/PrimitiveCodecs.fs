@@ -16,13 +16,20 @@ module PrimitiveCodecs =
 
     let stringEncoder : IJsonEncoder<string> =
         { new IJsonEncoder<string> with
-            member _.Encode v = JsonValue.String v }
+            // CLR strings can be null at interop boundaries (SQL nullable VARCHAR,
+            // C# / JSON sources). Match Newtonsoft / STJ / Fable.Remoting and
+            // emit JSON null instead of NREing in the writer.
+            member _.Encode v =
+                if isNull v then JsonValue.Null else JsonValue.String v }
 
     let stringDecoder : IJsonDecoder<string> =
         { new IJsonDecoder<string> with
             member _.Decode json =
                 match json with
                 | JsonValue.String s -> s
+                // Round-trip parity with stringEncoder: JSON null decodes back
+                // to a null string reference for non-option fields.
+                | JsonValue.Null -> null
                 | _ -> failwith "Expected JSON string" }
 
     let decimalEncoder : IJsonEncoder<decimal> =

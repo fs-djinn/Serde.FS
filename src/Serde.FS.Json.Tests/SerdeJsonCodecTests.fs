@@ -45,6 +45,21 @@ let ``serialize string round-trips`` () =
     Assert.AreEqual("hello world", SerdeJson.deserialize<string> json)
 
 [<Test>]
+let ``serialize null string emits JSON null and round-trips`` () =
+    // End-to-end coverage for the null-string fix: a top-level null string
+    // must serialize to literal "null" (not NRE in SerdeJsonWriter.escapeString
+    // as it did before) and deserialize back to a null reference.
+    let json = SerdeJson.serialize (null: string)
+    Assert.AreEqual("null", json)
+    Assert.IsNull(SerdeJson.deserialize<string> json)
+
+[<Test>]
+let ``writer is defensive against hand-built JsonValue.String null`` () =
+    // Belt-and-suspenders: even if a custom codec produces JsonValue.String
+    // null directly (bypassing stringEncoder), the writer must not NRE.
+    Assert.AreEqual("null", SerdeJsonWriter.writeToString (JsonValue.String null))
+
+[<Test>]
 let ``serialize decimal round-trips`` () =
     let json = SerdeJson.serialize 123.456m
     Assert.AreEqual(123.456m, SerdeJson.deserialize<decimal> json)
