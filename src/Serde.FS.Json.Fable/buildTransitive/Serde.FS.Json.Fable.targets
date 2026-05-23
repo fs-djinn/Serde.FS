@@ -21,19 +21,16 @@
 	     append, which puts it AFTER and breaks compile. Stash the user's
 	     items, clear `@(Compile)`, then re-add ours first and the user's
 	     after — net effect is a prepended generated file. -->
-	<!-- Skip generation on test projects (IsTestProject is auto-set by NUnit /
-	     xUnit / MSTest SDKs) and when explicitly opted-out via
-	     SerdeFableSkipGeneration. A test project that references the Fable
-	     client project transitively picks up this package, but doesn't want
-	     a fable-generated/ folder appearing in its source tree. The explicit
-	     property handles non-standard test harnesses, dev tools, etc. -->
-	<PropertyGroup>
-		<_SerdeFableShouldGenerate>true</_SerdeFableShouldGenerate>
-		<_SerdeFableShouldGenerate Condition="'$(IsTestProject)' == 'true' OR '$(SerdeFableSkipGeneration)' == 'true'">false</_SerdeFableShouldGenerate>
-	</PropertyGroup>
-
+	<!-- Skip generation on test projects ($(IsTestProject) is auto-set by
+	     Microsoft.NET.Test.Sdk via its .props file, so it's available at Target
+	     Condition eval time) and when opted out via SerdeFableSkipGeneration.
+	     A test project that transitively picks up this package via a FableClient
+	     project reference shouldn't sprout a fable-generated/ folder. The
+	     explicit property is the escape hatch for custom test harnesses or any
+	     project where IsTestProject isn't set automatically. -->
 	<Target Name="SerdeFableGenerate" BeforeTargets="CoreCompile"
-			Condition="'$(_SerdeFableShouldGenerate)' == 'true'">
+			Condition="'$(IsTestProject)' != 'true'
+			           AND '$(SerdeFableSkipGeneration)' != 'true'">
 		<Exec Command="dotnet &quot;$(MSBuildThisFileDirectory)../tools/net9.0/Serde.FS.Json.Fable.GeneratorHost.dll&quot; &quot;$(ProjectDir).&quot; &quot;$(MSBuildProjectDirectory)\fable-generated&quot; &quot;$(MSBuildProjectFullPath)&quot;" />
 
 		<ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\fable-generated')">

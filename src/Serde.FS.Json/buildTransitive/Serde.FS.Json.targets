@@ -9,21 +9,18 @@
 		<_SerdeJsonDirectProjectRef Include="@(ProjectReference)" />
 	</ItemGroup>
 
-	<!-- Skip generation on test projects (IsTestProject is auto-set by NUnit /
-	     xUnit / MSTest SDKs) and when explicitly opted-out via
-	     SerdeJsonSkipGeneration. Tests typically pick up Serde.FS.Json
-	     transitively via a Server reference but have no use for codecs; running
-	     the generator there is wasted build time and disk noise. The explicit
-	     property is the escape hatch for projects whose IsTestProject isn't
-	     set (custom test harnesses, dev tools, benchmark projects, etc.). -->
-	<PropertyGroup>
-		<_SerdeJsonShouldGenerate>true</_SerdeJsonShouldGenerate>
-		<_SerdeJsonShouldGenerate Condition="'$(IsTestProject)' == 'true' OR '$(SerdeJsonSkipGeneration)' == 'true'">false</_SerdeJsonShouldGenerate>
-	</PropertyGroup>
-
-	<!-- Collect .fs source files from directly-referenced projects for [<RpcApi>] discovery -->
+	<!-- Collect .fs source files from directly-referenced projects for [<RpcApi>] discovery.
+	     Skip on test projects ($(IsTestProject) is auto-set by Microsoft.NET.Test.Sdk
+	     via its .props file, so it's available at Target Condition eval time) and
+	     when opted out via SerdeJsonSkipGeneration. Tests typically pick up
+	     Serde.FS.Json transitively via a Server reference but have no use for
+	     codecs; running the generator wastes build time. The explicit property
+	     is the escape hatch for custom test harnesses, dev tools, benchmarks, or
+	     any project where IsTestProject isn't set automatically. -->
 	<Target Name="SerdeCollectRefSources" BeforeTargets="SerdeGenerate"
-			Condition="'@(_SerdeJsonDirectProjectRef)' != '' AND '$(_SerdeJsonShouldGenerate)' == 'true'">
+			Condition="'@(_SerdeJsonDirectProjectRef)' != ''
+			           AND '$(IsTestProject)' != 'true'
+			           AND '$(SerdeJsonSkipGeneration)' != 'true'">
 		<ItemGroup>
 			<_SerdeRefProjectDir Include="@(_SerdeJsonDirectProjectRef->'%(RootDir)%(Directory)')" />
 		</ItemGroup>
@@ -42,7 +39,8 @@
 	</Target>
 
 	<Target Name="SerdeGenerate" BeforeTargets="CoreCompile"
-			Condition="'$(_SerdeJsonShouldGenerate)' == 'true'">
+			Condition="'$(IsTestProject)' != 'true'
+			           AND '$(SerdeJsonSkipGeneration)' != 'true'">
 		<Exec Command="dotnet &quot;$(MSBuildThisFileDirectory)../tools/net9.0/Serde.FS.Json.GeneratorHost.dll&quot; &quot;$(ProjectDir).&quot; &quot;$(IntermediateOutputPath)serde-generated&quot; &quot;$(_SerdeRefSourceList)&quot;" />
 
 		<ItemGroup>
