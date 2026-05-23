@@ -18,6 +18,7 @@
 	<ItemGroup>
 		<None Include="RpcApi.http" />
 		<Compile Include="OrderApi.fs" />
+		<Compile Include="InventoryApi.fs" />
 		<Compile Include="Program.fs" />
 	</ItemGroup>
 

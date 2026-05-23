@@ -5,6 +5,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Authentication
 open SampleRpc.Shared
 open SampleRpc.Server.OrderApi
+open SampleRpc.Server.InventoryApi
 open Serde.FS.Json.AspNet
 
 module Handlers =
@@ -51,6 +52,11 @@ let main (argv: string array) =
     app.UseAuthorization() |> ignore
 
     let rpc = app.MapRpcApi<IOrderApi>(OrderApi())
+    // Second [<RpcApi>] mapped on the same app — verifies that two interfaces
+    // get isolated route prefixes (/rpc/IOrderApi/... vs /rpc/IInventoryApi/...)
+    // and that their generated codec modules don't collide on shared types
+    // (ProductId, Product are referenced by both).
+    app.MapRpcApi<IInventoryApi>(InventoryApi()) |> ignore
 
     rpc.ApplyRouteConventions(fun route ->
         match route.MethodName with

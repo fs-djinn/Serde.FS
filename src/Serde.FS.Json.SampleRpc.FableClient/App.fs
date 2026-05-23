@@ -6,6 +6,10 @@ open SampleRpc.Shared
 open SerdeGenerated.Fable
 
 let private client = IOrderApiFableClient.create "/"
+// Second Fable client for the second [<RpcApi>] interface — verifies the
+// emitter produces a distinct ~IInventoryApi.fable.g.fs file with codec
+// modules that don't collide with IOrderApi's (both reference Product/ProductId).
+let private inventory = IInventoryApiFableClient.create "/"
 
 [<LitElement("sample-app")>]
 let SampleApp() =
@@ -71,6 +75,24 @@ let SampleApp() =
                         return ps |> List.map (sprintf "%A") |> String.concat "\n"
                     }))
                 "ListProducts"
+            }
+
+            button {
+                onClick (fun _ ->
+                    call "Inventory.GetStock 42" (async {
+                        let! s = inventory.GetStock { Value = 42 }
+                        return sprintf "%A" s
+                    }))
+                "Inventory.GetStock 42"
+            }
+
+            button {
+                onClick (fun _ ->
+                    call "Inventory.GetStockedProduct 7 (shared Product)" (async {
+                        let! p = inventory.GetStockedProduct { Value = 7 }
+                        return sprintf "%A" p
+                    }))
+                "Inventory.GetStockedProduct 7"
             }
         }
 

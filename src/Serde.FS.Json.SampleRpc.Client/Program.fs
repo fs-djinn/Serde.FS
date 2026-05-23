@@ -10,6 +10,9 @@ let main _argv =
     http.DefaultRequestHeaders.Add("X-Api-Key", "ABC")
 
     let orders = RpcClient.create<IOrderApi> http "http://localhost:5050"
+    // Second proxy for the second interface — verifies that RpcClient.create
+    // routes each interface to its own URL prefix without crossing wires.
+    let inventory = RpcClient.create<IInventoryApi> http "http://localhost:5050"
 
     try
         async {
@@ -44,6 +47,22 @@ let main _argv =
             }
             let! summary = orders.PlaceOrder order
             printfn "Summary: %A" summary
+
+            printfn ""
+            printfn "--- IInventoryApi.GetStock ---"
+            let! stock = inventory.GetStock { Value = 42 }
+            printfn "Stock: %A" stock
+
+            printfn ""
+            printfn "--- IInventoryApi.ListLowStock ---"
+            let! lowStock = inventory.ListLowStock 10
+            for s in lowStock do
+                printfn "  %A" s
+
+            printfn ""
+            printfn "--- IInventoryApi.GetStockedProduct (shared Product type) ---"
+            let! stockedProduct = inventory.GetStockedProduct { Value = 7 }
+            printfn "Stocked product: %A" stockedProduct
         }
         |> Async.RunSynchronously
     with ex ->
