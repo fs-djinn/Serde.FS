@@ -21,7 +21,19 @@
 	     append, which puts it AFTER and breaks compile. Stash the user's
 	     items, clear `@(Compile)`, then re-add ours first and the user's
 	     after — net effect is a prepended generated file. -->
-	<Target Name="SerdeFableGenerate" BeforeTargets="CoreCompile">
+	<!-- Skip generation on test projects (IsTestProject is auto-set by NUnit /
+	     xUnit / MSTest SDKs) and when explicitly opted-out via
+	     SerdeFableSkipGeneration. A test project that references the Fable
+	     client project transitively picks up this package, but doesn't want
+	     a fable-generated/ folder appearing in its source tree. The explicit
+	     property handles non-standard test harnesses, dev tools, etc. -->
+	<PropertyGroup>
+		<_SerdeFableShouldGenerate>true</_SerdeFableShouldGenerate>
+		<_SerdeFableShouldGenerate Condition="'$(IsTestProject)' == 'true' OR '$(SerdeFableSkipGeneration)' == 'true'">false</_SerdeFableShouldGenerate>
+	</PropertyGroup>
+
+	<Target Name="SerdeFableGenerate" BeforeTargets="CoreCompile"
+			Condition="'$(_SerdeFableShouldGenerate)' == 'true'">
 		<Exec Command="dotnet &quot;$(MSBuildThisFileDirectory)../tools/net9.0/Serde.FS.Json.Fable.GeneratorHost.dll&quot; &quot;$(ProjectDir).&quot; &quot;$(MSBuildProjectDirectory)\fable-generated&quot; &quot;$(MSBuildProjectFullPath)&quot;" />
 
 		<ItemGroup Condition="Exists('$(MSBuildProjectDirectory)\fable-generated')">
@@ -36,7 +48,9 @@
 	<!-- The fable-generated/ folder is owned entirely by this project (this
 	     was the architectural shift away from cross-project writes): on
 	     Clean we just remove it. No ownership question, no rebuild dance.
-	     Next build re-runs the generator and recreates whatever's needed. -->
+	     Next build re-runs the generator and recreates whatever's needed.
+	     Intentionally ungated so users who set SerdeFableSkipGeneration after
+	     the fact get a `dotnet clean` that cleans up stale generated files. -->
 	<Target Name="SerdeFableClean" AfterTargets="Clean">
 		<RemoveDir Directories="$(MSBuildProjectDirectory)\fable-generated" />
 	</Target>
