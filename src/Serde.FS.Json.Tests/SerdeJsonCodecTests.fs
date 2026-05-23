@@ -188,6 +188,31 @@ let ``deserialize non-array JSON for Set<int> throws`` () =
         SerdeJson.deserialize<Set<int>> "42" |> ignore
     ) |> ignore
 
+[<Test>]
+let ``seq<string> round-trips via SerdeJson`` () =
+    // Regression: the runtime codec registry had factories for list/array/Set/
+    // Map/Result but not for seq<'T>/IEnumerable<'T>, so any response DTO with
+    // a seq field (or Result<seq<_>, _>) threw SerdeCodecNotFoundException
+    // when the AspNet dispatcher tried to encode it.
+    let original = seq { "apple"; "banana"; "cherry" }
+    let json = SerdeJson.serialize original
+    Assert.AreEqual("[\"apple\",\"banana\",\"cherry\"]", json)
+    let result = SerdeJson.deserialize<seq<string>> json
+    Assert.AreEqual(List.ofSeq original, List.ofSeq result)
+
+[<Test>]
+let ``Result<unit, seq<string>> round-trips via SerdeJson`` () =
+    // Exact CEI failure shape: save methods return Result<unit, string seq>
+    // where the Error branch carries validation error messages. ResultCodecFactory
+    // recursively resolves Ok/Error codecs, so the seq factory must be reachable
+    // from inside Result.
+    let original : Result<unit, seq<string>> = Error (seq { "Name is required"; "Code must be unique" })
+    let json = SerdeJson.serialize original
+    let result = SerdeJson.deserialize<Result<unit, seq<string>>> json
+    match original, result with
+    | Error a, Error b -> Assert.AreEqual(List.ofSeq a, List.ofSeq b)
+    | _ -> Assert.Fail "expected Error"
+
 // ---------------------------------------------------------------------------
 // Custom codec via registry
 // ---------------------------------------------------------------------------

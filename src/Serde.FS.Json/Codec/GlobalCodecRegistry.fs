@@ -7,5 +7,8 @@ module GlobalCodecRegistry =
         |> CodecRegistry.addFactory (typedefof<Set<_>>, CollectionCodecs.SetCodecFactory.create)
         |> CodecRegistry.addFactory (typeof<System.Array>, CollectionCodecs.ArrayCodecFactory.create)
         |> CodecRegistry.addFactory (typedefof<list<_>>, CollectionCodecs.ListCodecFactory.create)
+        // typedefof<seq<_>> = typedefof<IEnumerable<_>> — covers any value typed
+        // as seq<'T> on the wire (same JSON-array shape as list/array).
+        |> CodecRegistry.addFactory (typedefof<seq<_>>, CollectionCodecs.SeqCodecFactory.create)
         |> CodecRegistry.addFactory (typedefof<Map<_,_>>, CollectionCodecs.MapCodecFactory.create)
         |> CodecRegistry.addFactory (typedefof<Result<_,_>>, CollectionCodecs.ResultCodecFactory.create)

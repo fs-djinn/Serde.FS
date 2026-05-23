@@ -71,6 +71,30 @@ module CollectionCodecs =
                         arr :> obj
                     | _ -> failwith $"Expected JSON array for %s{arrayType.Name}" }
 
+    /// Factory for constructing seq<'T> (IEnumerable<'T>) codecs dynamically from the registry.
+    /// Wire shape is identical to list/array (JSON array). On decode, returns the
+    /// underlying array boxed as IEnumerable<'T> — sufficient for any seq<'T> consumer.
+    module SeqCodecFactory =
+        let create (typeArgs: Type[]) (registry: CodecRegistry) : IJsonCodec =
+            let elemType = typeArgs[0]
+            let elemCodec = CodecResolver.resolve elemType registry
+            let seqType = typedefof<seq<_>>.MakeGenericType(elemType)
+
+            { new IJsonCodec with
+                member _.Type = seqType
+                member _.Encode obj =
+                    let items =
+                        [ for elem in (obj :?> IEnumerable) -> elemCodec.Encode elem ]
+                    JsonValue.Array items
+                member _.Decode json =
+                    match json with
+                    | JsonValue.Array items ->
+                        let decoded = items |> List.map elemCodec.Decode
+                        let arr = Array.CreateInstance(elemType, decoded.Length)
+                        decoded |> List.iteri (fun i item -> arr.SetValue(item, i))
+                        arr :> obj
+                    | _ -> failwith $"Expected JSON array for %s{seqType.Name}" }
+
     /// Factory for constructing List<'T> codecs dynamically from the registry.
     module ListCodecFactory =
         let create (typeArgs: Type[]) (registry: CodecRegistry) : IJsonCodec =
