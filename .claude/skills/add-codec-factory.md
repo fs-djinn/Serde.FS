@@ -34,21 +34,16 @@ Key conventions:
 - Resolve inner type codecs via `CodecResolver.resolve` for recursive support
 - Cache reflection handles (PropertyInfo, MethodInfo, etc.) outside the `IJsonCodec` implementation for performance
 
-### 3. Register the factory in BOTH registries
+### 3. Register the factory
 
-This is critical -- there are two places and both must be updated:
+There is one source of truth for the default factory list:
 
 **File:** `src/Serde.FS.Json/Codec/JsonCodecRegistry.fs`
 ```fsharp
 |> CodecRegistry.addFactory (typedefof<Xxx<_>>, CollectionCodecs.XxxCodecFactory.create)
 ```
 
-**File:** `src/Serde.FS.Json/Codec/GlobalCodecRegistry.fs`
-```fsharp
-|> CodecRegistry.addFactory (typedefof<Xxx<_>>, CollectionCodecs.XxxCodecFactory.create)
-```
-
-`JsonCodecRegistry.create()` is the one that matters at runtime -- `SerdeJson.registerCodecs` rebuilds from it and replaces `GlobalCodecRegistry.Current`. Missing the `JsonCodecRegistry` registration will cause the factory to work in tests but fail at runtime.
+`GlobalCodecRegistry.Current` initializes from `JsonCodecRegistry.create()` (see `GlobalCodecRegistry.fs`), so a single addition here flows to every runtime consumer. This consolidation was done deliberately because the old two-file pattern caused multiple "factory added in one place but not the other" regressions (`seq<T>`, `Option<T>`, etc.). Do not reintroduce a separate factory list in `GlobalCodecRegistry.fs`.
 
 ### 4. Add tests
 
